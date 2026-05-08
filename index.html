@@ -796,24 +796,44 @@ window.addEventListener('DOMContentLoaded', async () => {
 // AUTH
 // ──────────────────────────────────────────────────────────────────
 async function handleLogin() {
-  const email    = q('#login-email').value.trim();
-  const password = q('#login-password').value;
-  if (!email || !password) { loginError('Please enter email and password.'); return; }
+  // Use raw getElementById — zero dependency on q() or any helper
+  const emailEl  = document.getElementById('login-email');
+  const passEl   = document.getElementById('login-password');
+  const btn      = document.getElementById('login-btn');
+  const errEl    = document.getElementById('login-error');
 
-  setLoading('login-btn', true, 'Signing in…');
+  const email    = emailEl ? emailEl.value.trim() : '';
+  const password = passEl  ? passEl.value          : '';
+
+  if (!email || !password) {
+    if (errEl) { errEl.textContent = 'Please enter email and password.'; errEl.classList.remove('hidden'); }
+    return;
+  }
+
+  // Show loading state
+  if (btn)   { btn.disabled = true; btn.textContent = 'Signing in...'; }
+  if (errEl) { errEl.classList.add('hidden'); }
+
   try {
-    if (!supabase) throw new Error('Not connected to database. Please refresh and try again.');
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    // Get or build the Supabase client
+    const client = supabase || window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    if (!client) throw new Error('Not connected. Please refresh the page.');
+
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    // Directly call onSignedIn — don't wait for onAuthStateChange event
-    if (data?.user) {
-      show('loading-screen');
-      hide('login-screen');
-      await onSignedIn(data.user);
-    }
+    if (!data || !data.user) throw new Error('No user returned — please try again.');
+
+    // Hide login, show loading spinner, then launch app
+    const loginEl   = document.getElementById('login-screen');
+    const loadingEl = document.getElementById('loading-screen');
+    if (loginEl)   loginEl.style.display   = 'none';
+    if (loadingEl) loadingEl.style.display = 'flex';
+
+    await onSignedIn(data.user);
+
   } catch (e) {
-    loginError(e.message || 'Sign in failed.');
-    setLoading('login-btn', false, 'Sign In');
+    if (errEl) { errEl.textContent = e.message || 'Sign in failed.'; errEl.classList.remove('hidden'); }
+    if (btn)   { btn.disabled = false; btn.textContent = 'Sign In'; }
   }
 }
 
@@ -941,12 +961,21 @@ function enterDemoMode() {
 // APP LAUNCH
 // ──────────────────────────────────────────────────────────────────
 function launchApp(isDemo = false) {
-  hide('loading-screen');
-  hide('login-screen');
-  show('app');
+  // Use raw getElementById — bypass all helpers for reliability
+  const loadingEl = document.getElementById('loading-screen');
+  const loginEl   = document.getElementById('login-screen');
+  const appEl     = document.getElementById('app');
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (loginEl)   loginEl.style.display   = 'none';
+  if (appEl)     appEl.style.display     = 'block';
 
-  q('#header-name').textContent    = currentProfile?.full_name || currentUser?.email || '';
-  q('#header-company').textContent = currentProfile?.company   || '';
+  const nameEl = document.getElementById('header-name');
+  const compEl = document.getElementById('header-company');
+  if (nameEl) nameEl.textContent = currentProfile?.full_name || currentUser?.email || '';
+  if (compEl) compEl.textContent = currentProfile?.company   || '';
+
+  const adminBtn = document.getElementById('admin-panel-btn');
+  if (adminBtn) adminBtn.style.display = currentProfile?.role === 'admin' ? 'flex' : 'none';
 
   if (currentProfile?.role === 'admin') show('#admin-panel-btn');
   else hide('#admin-panel-btn');
