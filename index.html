@@ -802,8 +802,15 @@ async function handleLogin() {
 
   setLoading('login-btn', true, 'Signing in…');
   try {
+    if (!supabase) throw new Error('Not connected to database. Please refresh and try again.');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    // Directly call onSignedIn — don't wait for onAuthStateChange event
+    if (data?.user) {
+      show('loading-screen');
+      hide('login-screen');
+      await onSignedIn(data.user);
+    }
   } catch (e) {
     loginError(e.message || 'Sign in failed.');
     setLoading('login-btn', false, 'Sign In');
@@ -853,6 +860,7 @@ async function handleLogout() {
 }
 
 async function onSignedIn(user) {
+  if (currentUser?.id === user?.id) return; // already loaded, skip duplicate event
   currentUser = user;
   try {
     const { data: profile, error } = await supabase
