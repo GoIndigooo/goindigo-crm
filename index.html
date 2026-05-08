@@ -768,13 +768,13 @@ window.addEventListener('DOMContentLoaded', async () => {
       await onSignedIn(session.user);
     }
 
-    // Only start listening for auth changes AFTER the initial check
-    // so a SIGNED_OUT event doesn't interfere with demo mode
+    // Listen for auth changes (magic links, logouts, etc.)
     supabase.auth.onAuthStateChange(async (event, session) => {
-      if (DEMO_MODE || !currentUser) return; // ignore if in demo or not yet logged in
+      if (DEMO_MODE) return; // ignore all auth events in demo mode
       if (event === 'SIGNED_IN' && session) {
         await onSignedIn(session.user);
       } else if (event === 'SIGNED_OUT') {
+        if (!currentUser) return; // ignore SIGNED_OUT if we never logged in (avoids login flash on load)
         showLoginScreen();
       }
     });
