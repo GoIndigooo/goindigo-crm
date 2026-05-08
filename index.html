@@ -367,8 +367,14 @@
             if (adminBtn) adminBtn.style.display = profile.role === 'admin' ? 'flex' : 'none';
 
             // Kick off the rest of the app if main script loaded
-            if (typeof loadLeads === 'function') loadLeads();
-            else if (typeof buildKanbanColumns === 'function') { buildKanbanColumns(); if (typeof buildMobileFilter === 'function') buildMobileFilter(); }
+            if (typeof launchApp === 'function') {
+              // Best path: launchApp builds columns + loads leads in one shot
+              launchApp();
+            } else if (typeof buildKanbanColumns === 'function') {
+              buildKanbanColumns();
+              if (typeof buildMobileFilter === 'function') buildMobileFilter();
+              if (typeof loadLeads === 'function') loadLeads();
+            }
           })
           .catch(function(err) {
             // Profile fetch failed but we're logged in — show app anyway
@@ -378,7 +384,8 @@
             document.getElementById('app').style.display = 'block';
             var nameEl = document.getElementById('header-name');
             if (nameEl) nameEl.textContent = user.email;
-            if (typeof loadLeads === 'function') loadLeads();
+            if (typeof launchApp === 'function') launchApp();
+            else if (typeof loadLeads === 'function') loadLeads();
           });
       })
       .catch(function(err) {
