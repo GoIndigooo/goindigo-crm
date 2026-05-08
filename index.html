@@ -91,8 +91,21 @@
   /* ── Stats bar ── */
   .stat-card { background: #0D0D1A; border: 1px solid rgba(99,102,241,.15); border-radius: 8px; padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; transition: border-color .2s; }
   .stat-card:hover { border-color: rgba(99,102,241,.4); }
-  .stat-value { font-size: 1.25rem; font-weight: 700; color: #F1F5F9; }
+  .stat-value { font-size: 1.25rem; font-weight: 700; color: #F1F5F9; line-height: 1.2; }
+  .stat-trend { font-size: .65rem; font-weight: 600; letter-spacing: .02em; min-height: 12px; }
+  .trend-up   { color: #34D399; }
+  .trend-down { color: #F87171; }
+  .trend-flat { color: #4B5563; }
   .stat-label { font-size: .7rem; color: #4B5563; text-transform: uppercase; letter-spacing: .05em; }
+  /* Attribution table */
+  .attr-table { width: 100%; border-collapse: collapse; font-size: .8rem; margin-bottom: 20px; }
+  .attr-table th { text-align: left; padding: 6px 10px; color: #4B5563; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid rgba(99,102,241,.15); }
+  .attr-table td { padding: 8px 10px; border-bottom: 1px solid rgba(99,102,241,.07); color: #CBD5E1; }
+  .attr-table tr:hover td { background: rgba(99,102,241,.05); }
+  .attr-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .attr-section-title { font-size: .75rem; font-weight: 700; color: #818CF8; text-transform: uppercase; letter-spacing: .08em; margin: 16px 0 6px; }
+  .attr-win-pill { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: .68rem; font-weight: 700; background: rgba(16,185,129,.15); color: #34D399; border: 1px solid rgba(16,185,129,.25); }
+  .attr-ads-pill { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: .68rem; font-weight: 700; background: rgba(6,182,212,.15); color: #67E8F9; border: 1px solid rgba(6,182,212,.25); }
 
   /* ── Toast ── */
   #toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
@@ -286,26 +299,32 @@
     <div id="stats-bar" class="grid grid-cols-3 sm:grid-cols-6 gap-2 px-4 pb-3 stats-bar">
       <div class="stat-card">
         <div id="stat-total" class="stat-value">–</div>
+        <div id="stat-total-trend" class="stat-trend trend-flat"></div>
         <div class="stat-label">Total Leads</div>
       </div>
       <div class="stat-card">
         <div id="stat-contacted" class="stat-value">–</div>
+        <div id="stat-contacted-trend" class="stat-trend trend-flat"></div>
         <div class="stat-label">Contacted</div>
       </div>
       <div class="stat-card">
         <div id="stat-estimates" class="stat-value">–</div>
+        <div id="stat-estimates-trend" class="stat-trend trend-flat"></div>
         <div class="stat-label">Estimates</div>
       </div>
       <div class="stat-card">
         <div id="stat-won" class="stat-value">–</div>
+        <div id="stat-won-trend" class="stat-trend trend-flat"></div>
         <div class="stat-label">Jobs Won</div>
       </div>
       <div class="stat-card">
         <div id="stat-revenue" class="stat-value" style="color:#34D399;">–</div>
+        <div id="stat-revenue-trend" class="stat-trend trend-flat"></div>
         <div class="stat-label">Revenue</div>
       </div>
       <div class="stat-card">
         <div id="stat-winrate" class="stat-value" style="color:#818CF8;">–</div>
+        <div id="stat-winrate-trend" class="stat-trend trend-flat"></div>
         <div class="stat-label">Win Rate</div>
       </div>
     </div>
@@ -562,6 +581,7 @@
       <div class="flex gap-2 mb-4">
         <button class="admin-tab active" onclick="switchAdminTab('all-leads', this)">All Leads</button>
         <button class="admin-tab" onclick="switchAdminTab('clients', this)">Manage Clients</button>
+        <button class="admin-tab" onclick="switchAdminTab('attribution', this)">&#9964; Attribution</button>
       </div>
       <div id="admin-tab-all-leads">
         <div id="admin-leads-list" class="space-y-3">
@@ -575,6 +595,11 @@
         </div>
         <div id="admin-clients-list" class="space-y-2">
           <div class="flex items-center gap-2"><div class="spinner"></div><span class="text-sm" style="color:#4B5563;">Loading…</span></div>
+        </div>
+      </div>
+      <div id="admin-tab-attribution" class="hidden">
+        <div id="attribution-report">
+          <div class="flex items-center gap-2 py-6 justify-center"><div class="spinner"></div><span class="text-sm" style="color:#4B5563;">Building report…</span></div>
         </div>
       </div>
     </div>
@@ -1415,20 +1440,159 @@ function scheduleNotesSave() {
 // STATS BAR
 // ──────────────────────────────────────────────────────────────────
 function updateStats() {
-  const total      = allLeads.length;
-  const contacted  = allLeads.filter(l => ['contacted','estimate_scheduled','estimate_completed','job_won','job_complete'].includes(l.stage)).length;
-  const estimates  = allLeads.filter(l => ['estimate_scheduled','estimate_completed'].includes(l.stage)).length;
-  const won        = allLeads.filter(l => l.stage === 'job_won' || l.stage === 'job_complete').length;
-  const revenue    = allLeads.filter(l => l.job_value).reduce((s, l) => s + Number(l.job_value), 0);
-  const closed     = allLeads.filter(l => l.stage === 'job_won' || l.stage === 'job_complete' || l.stage === 'lost').length;
-  const winRate    = closed > 0 ? Math.round((won / closed) * 100) : 0;
+  const now      = Date.now();
+  const day7     = now - 7  * 86400000;
+  const day14    = now - 14 * 86400000;
 
-  q('#stat-total').textContent    = total;
-  q('#stat-contacted').textContent= contacted;
-  q('#stat-estimates').textContent= estimates;
-  q('#stat-won').textContent      = won;
-  q('#stat-revenue').textContent  = revenue >= 1000 ? '$' + (revenue/1000).toFixed(1) + 'k' : '$' + Math.round(revenue);
-  q('#stat-winrate').textContent  = winRate + '%';
+  const thisWeek = allLeads.filter(l => new Date(l.created_at).getTime() >= day7);
+  const lastWeek = allLeads.filter(l => { const t = new Date(l.created_at).getTime(); return t >= day14 && t < day7; });
+
+  // Helper: trend arrow + % vs last week
+  function trendHTML(curr, prev) {
+    if (prev === 0 && curr === 0) return '';
+    if (prev === 0) return `<span class="trend-up">&#8593; New</span>`;
+    const pct = Math.round(((curr - prev) / prev) * 100);
+    if (pct === 0) return `<span class="trend-flat">&#8594; flat</span>`;
+    const cls  = pct > 0 ? 'trend-up' : 'trend-down';
+    const arrow= pct > 0 ? '&#8593;' : '&#8595;';
+    return `<span class="${cls}">${arrow} ${Math.abs(pct)}% vs last 7d</span>`;
+  }
+
+  // All-time totals
+  const total     = allLeads.length;
+  const contacted = allLeads.filter(l => ['contacted','estimate_scheduled','estimate_completed','job_won','job_complete'].includes(l.stage)).length;
+  const estimates = allLeads.filter(l => ['estimate_scheduled','estimate_completed'].includes(l.stage)).length;
+  const won       = allLeads.filter(l => l.stage === 'job_won' || l.stage === 'job_complete').length;
+  const revenue   = allLeads.filter(l => l.job_value).reduce((s, l) => s + Number(l.job_value), 0);
+  const closed    = allLeads.filter(l => ['job_won','job_complete','lost'].includes(l.stage)).length;
+  const winRate   = closed > 0 ? Math.round((won / closed) * 100) : 0;
+
+  // This week vs last week
+  const twTotal  = thisWeek.length;
+  const lwTotal  = lastWeek.length;
+  const twWon    = thisWeek.filter(l => ['job_won','job_complete'].includes(l.stage)).length;
+  const lwWon    = lastWeek.filter(l => ['job_won','job_complete'].includes(l.stage)).length;
+  const twRev    = thisWeek.filter(l => l.job_value).reduce((s,l) => s + Number(l.job_value), 0);
+  const lwRev    = lastWeek.filter(l => l.job_value).reduce((s,l) => s + Number(l.job_value), 0);
+  const twEst    = thisWeek.filter(l => ['estimate_scheduled','estimate_completed'].includes(l.stage)).length;
+  const lwEst    = lastWeek.filter(l => ['estimate_scheduled','estimate_completed'].includes(l.stage)).length;
+  const twCont   = thisWeek.filter(l => ['contacted','estimate_scheduled','estimate_completed','job_won','job_complete'].includes(l.stage)).length;
+  const lwCont   = lastWeek.filter(l => ['contacted','estimate_scheduled','estimate_completed','job_won','job_complete'].includes(l.stage)).length;
+  const twClosed = thisWeek.filter(l => ['job_won','job_complete','lost'].includes(l.stage)).length;
+  const lwClosed = lastWeek.filter(l => ['job_won','job_complete','lost'].includes(l.stage)).length;
+  const twWR     = twClosed > 0 ? Math.round((twWon/twClosed)*100) : 0;
+  const lwWR     = lwClosed > 0 ? Math.round((lwWon/lwClosed)*100) : 0;
+
+  q('#stat-total').textContent     = total;
+  q('#stat-contacted').textContent = contacted;
+  q('#stat-estimates').textContent = estimates;
+  q('#stat-won').textContent       = won;
+  q('#stat-revenue').textContent   = revenue >= 1000 ? '$' + (revenue/1000).toFixed(1) + 'k' : '$' + Math.round(revenue);
+  q('#stat-winrate').textContent   = winRate + '%';
+
+  q('#stat-total-trend').innerHTML     = trendHTML(twTotal, lwTotal);
+  q('#stat-contacted-trend').innerHTML = trendHTML(twCont, lwCont);
+  q('#stat-estimates-trend').innerHTML = trendHTML(twEst, lwEst);
+  q('#stat-won-trend').innerHTML       = trendHTML(twWon, lwWon);
+  q('#stat-revenue-trend').innerHTML   = trendHTML(twRev, lwRev);
+  q('#stat-winrate-trend').innerHTML   = trendHTML(twWR, lwWR);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// ATTRIBUTION REPORT
+// ──────────────────────────────────────────────────────────────────
+function buildAttributionReport() {
+  const el = q('#attribution-report');
+  if (!el) return;
+
+  const leads = allLeads;
+  if (!leads.length) {
+    el.innerHTML = '<div class="text-sm text-center py-8" style="color:#4B5563;">No leads to analyze yet.</div>';
+    return;
+  }
+
+  // Helper: format money
+  const fm = n => n >= 1000 ? '$' + (n/1000).toFixed(1) + 'k' : n > 0 ? '$' + Math.round(n) : '–';
+  const winPill = pct => pct > 0 ? `<span class="attr-win-pill">${pct}%</span>` : '–';
+
+  // ── Section 1: By Campaign ──
+  const campaigns = {};
+  leads.forEach(l => {
+    const k = l.utm_campaign || '(direct / unknown)';
+    if (!campaigns[k]) campaigns[k] = { leads:0, won:0, revenue:0, closed:0 };
+    campaigns[k].leads++;
+    if (['job_won','job_complete'].includes(l.stage)) { campaigns[k].won++; campaigns[k].revenue += Number(l.job_value||0); }
+    if (['job_won','job_complete','lost'].includes(l.stage)) campaigns[k].closed++;
+  });
+  const campRows = Object.entries(campaigns)
+    .sort((a,b) => b[1].leads - a[1].leads)
+    .map(([name, d]) => {
+      const wr = d.closed > 0 ? Math.round((d.won/d.closed)*100) : 0;
+      return `<tr>
+        <td>${name}</td>
+        <td class="num">${d.leads}</td>
+        <td class="num">${d.won}</td>
+        <td class="num">${fm(d.revenue)}</td>
+        <td class="num">${winPill(wr)}</td>
+      </tr>`;
+    }).join('');
+
+  // ── Section 2: By Service Type ──
+  const services = {};
+  leads.forEach(l => {
+    const k = (l.service || 'other').charAt(0).toUpperCase() + (l.service||'other').slice(1);
+    if (!services[k]) services[k] = { leads:0, won:0, revenue:0, closed:0 };
+    services[k].leads++;
+    if (['job_won','job_complete'].includes(l.stage)) { services[k].won++; services[k].revenue += Number(l.job_value||0); }
+    if (['job_won','job_complete','lost'].includes(l.stage)) services[k].closed++;
+  });
+  const svcRows = Object.entries(services)
+    .sort((a,b) => b[1].leads - a[1].leads)
+    .map(([name, d]) => {
+      const wr = d.closed > 0 ? Math.round((d.won/d.closed)*100) : 0;
+      return `<tr>
+        <td>${name}</td>
+        <td class="num">${d.leads}</td>
+        <td class="num">${d.won}</td>
+        <td class="num">${fm(d.revenue)}</td>
+        <td class="num">${winPill(wr)}</td>
+      </tr>`;
+    }).join('');
+
+  // ── Section 3: Google Ads Attribution ──
+  const adsLeads  = leads.filter(l => l.gclid);
+  const adsWon    = adsLeads.filter(l => ['job_won','job_complete'].includes(l.stage));
+  const adsRev    = adsWon.reduce((s,l) => s + Number(l.job_value||0), 0);
+  const adsClosed = adsLeads.filter(l => ['job_won','job_complete','lost'].includes(l.stage)).length;
+  const adsWR     = adsClosed > 0 ? Math.round((adsWon.length/adsClosed)*100) : 0;
+  const totalWon  = leads.filter(l => ['job_won','job_complete'].includes(l.stage));
+  const totalRev  = totalWon.reduce((s,l) => s + Number(l.job_value||0), 0);
+
+  el.innerHTML = `
+    <p class="attr-section-title">By Campaign</p>
+    <table class="attr-table">
+      <thead><tr><th>Campaign</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Revenue</th><th class="num">Win Rate</th></tr></thead>
+      <tbody>${campRows || '<tr><td colspan="5" style="color:#4B5563;text-align:center;padding:12px;">No campaign data</td></tr>'}</tbody>
+    </table>
+
+    <p class="attr-section-title">By Service Type</p>
+    <table class="attr-table">
+      <thead><tr><th>Service</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Revenue</th><th class="num">Win Rate</th></tr></thead>
+      <tbody>${svcRows || '<tr><td colspan="5" style="color:#4B5563;text-align:center;padding:12px;">No service data</td></tr>'}</tbody>
+    </table>
+
+    <p class="attr-section-title">Google Ads Attribution <span class="attr-ads-pill">GCLID Tracked</span></p>
+    <table class="attr-table">
+      <thead><tr><th>Metric</th><th class="num">Count</th><th class="num">Revenue</th></tr></thead>
+      <tbody>
+        <tr><td>Leads with Google Click ID</td><td class="num">${adsLeads.length} / ${leads.length}</td><td class="num">–</td></tr>
+        <tr><td>Jobs Won via Google Ads</td><td class="num">${adsWon.length}</td><td class="num">${fm(adsRev)}</td></tr>
+        <tr><td>Total Revenue (all sources)</td><td class="num">${totalWon.length} jobs</td><td class="num">${fm(totalRev)}</td></tr>
+        <tr><td>Google Ads Win Rate</td><td class="num">${winPill(adsWR)}</td><td class="num">–</td></tr>
+        <tr><td>Conversion-Ready for Google Import</td><td class="num"><span class="attr-ads-pill">${adsWon.length} leads</span></td><td class="num">–</td></tr>
+      </tbody>
+    </table>
+  `;
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -1543,14 +1707,15 @@ async function openAdminPanel() {
 async function switchAdminTab(tab, btn) {
   document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
-  ['all-leads','clients'].forEach(t => {
+  ['all-leads','clients','attribution'].forEach(t => {
     const el = q(`#admin-tab-${t}`);
     if (el) el.classList.add('hidden');
   });
   q(`#admin-tab-${tab}`)?.classList.remove('hidden');
 
-  if (tab === 'all-leads') loadAdminLeads();
-  if (tab === 'clients')   loadAdminClients();
+  if (tab === 'all-leads')   loadAdminLeads();
+  if (tab === 'clients')     loadAdminClients();
+  if (tab === 'attribution') buildAttributionReport();
 }
 
 async function loadAdminLeads() {
