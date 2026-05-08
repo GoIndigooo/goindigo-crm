@@ -2081,11 +2081,16 @@ async function loadAdminLeads() {
   }
 
   const grouped = {};
-  profiles.filter(p => p.role !== 'admin').forEach(p => {
+  profiles.forEach(p => {
     grouped[p.id] = { profile: p, leads: [] };
   });
   leads.forEach(l => {
     if (grouped[l.client_id]) grouped[l.client_id].leads.push(l);
+    else {
+      // Lead's client_id has no profile entry — bucket under unknown
+      if (!grouped['__unknown__']) grouped['__unknown__'] = { profile: { id: '__unknown__', full_name: 'Unknown Client', company: '—', role: 'client' }, leads: [] };
+      grouped['__unknown__'].leads.push(l);
+    }
   });
 
   container.innerHTML = Object.values(grouped).map(({ profile, leads: clientLeads }) => {
