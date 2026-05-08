@@ -270,6 +270,99 @@
 </script>
 
 <!-- ================================================================
+     SELF-CONTAINED LOGIN — runs immediately, zero main-script dependency
+================================================================ -->
+<script>
+(function() {
+  var SUPA_URL = 'https://fsdqkrgqheekrgphhuqx.supabase.co';
+  var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzZHFrcmdxaGVla3JncGhodXF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODAwNzksImV4cCI6MjA5Mzc1NjA3OX0.9Ot3KAEYGHeX3IAolqb8V-dFSazcSHn6K-QVlkN4850';
+
+  function showErr(msg) {
+    var el = document.getElementById('login-error');
+    if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+  }
+
+  function doLogin() {
+    var emailEl = document.getElementById('login-email');
+    var passEl  = document.getElementById('login-password');
+    var btn     = document.getElementById('login-btn');
+    var email   = emailEl ? emailEl.value.trim() : '';
+    var pass    = passEl  ? passEl.value          : '';
+
+    if (!email || !pass) { showErr('Please enter email and password.'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+
+    var client = (typeof supabase !== 'undefined' && supabase && supabase.auth)
+      ? supabase
+      : window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
+    client.auth.signInWithPassword({ email: email, password: pass })
+      .then(function(result) {
+        var data  = result.data;
+        var error = result.error;
+        if (error) { showErr(error.message); if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; } return; }
+        if (!data || !data.user) { showErr('Login failed — no user returned.'); if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; } return; }
+
+        // Auth succeeded — load profile and show app
+        var user = data.user;
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('loading-screen').style.display = 'flex';
+
+        client.from('profiles').select('*').eq('id', user.id).single()
+          .then(function(res) {
+            var profile = res.data || { id: user.id, full_name: user.email, company: '', role: 'client' };
+
+            // Set globals so the main app works
+            window.currentUser    = user;
+            window.currentProfile = profile;
+            window.supabaseClient = client;
+
+            // Show the app
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+
+            // Header
+            var nameEl = document.getElementById('header-name');
+            var compEl = document.getElementById('header-company');
+            if (nameEl) nameEl.textContent = profile.full_name || user.email;
+            if (compEl) compEl.textContent = profile.company || '';
+
+            // Admin button
+            var adminBtn = document.getElementById('admin-panel-btn');
+            if (adminBtn) adminBtn.style.display = profile.role === 'admin' ? 'flex' : 'none';
+
+            // Kick off the rest of the app if main script loaded
+            if (typeof loadLeads === 'function') loadLeads();
+            else if (typeof buildKanbanColumns === 'function') { buildKanbanColumns(); if (typeof buildMobileFilter === 'function') buildMobileFilter(); }
+          })
+          .catch(function(err) {
+            // Profile fetch failed but we're logged in — show app anyway
+            window.currentUser = user;
+            window.currentProfile = { id: user.id, full_name: user.email, company: '', role: 'client' };
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            var nameEl = document.getElementById('header-name');
+            if (nameEl) nameEl.textContent = user.email;
+            if (typeof loadLeads === 'function') loadLeads();
+          });
+      })
+      .catch(function(err) {
+        showErr(err.message || 'Sign in failed.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+      });
+  }
+
+  // Wire up login button as soon as DOM is ready
+  var loginBtn = document.getElementById('login-btn');
+  if (loginBtn) loginBtn.onclick = doLogin;
+
+  // Also wire Enter key on password field
+  var passField = document.getElementById('login-password');
+  if (passField) passField.addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
+})();
+</script>
+
+<!-- ================================================================
      MAIN APP
 ================================================================ -->
 <div id="app" style="display:none">
