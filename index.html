@@ -213,7 +213,15 @@
       <button id="login-btn" onclick="handleLogin()" class="btn btn-primary w-full justify-center">
         Sign In
       </button>
-      <button id="demo-btn" type="button" class="btn btn-ghost w-full justify-center mt-2">
+      <div class="mt-3 pt-3" style="border-top:1px solid rgba(99,102,241,.15);">
+        <p class="text-xs text-center mb-2" style="color:#64748B;">No password? Get a one-click login link.</p>
+        <div class="flex gap-2">
+          <input id="magic-email" type="email" class="form-input" placeholder="your@email.com" style="flex:1;font-size:13px;">
+          <button id="magic-btn" type="button" onclick="sendMagicLink()" class="btn btn-primary" style="white-space:nowrap;padding:0 14px;font-size:13px;">Send Link</button>
+        </div>
+        <div id="magic-msg" class="hidden text-xs mt-2 text-center" style="color:#6EE7B7;"></div>
+      </div>
+      <button id="demo-btn" type="button" class="btn btn-ghost w-full justify-center mt-3">
         Preview Demo Mode
       </button>
     </div>
@@ -803,6 +811,33 @@ async function handleLogin() {
 }
 
 q('#login-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+
+async function sendMagicLink() {
+  const email = (q('#magic-email')?.value || '').trim();
+  if (!email) { showMagicMsg('Please enter your email address.', false); return; }
+  const btn = q('#magic-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: 'https://goindigooo.github.io/goindigo-crm/' }
+    });
+    if (error) throw error;
+    showMagicMsg('✓ Link sent! Check your inbox — valid for 60 min.', true);
+  } catch (e) {
+    showMagicMsg(e.message || 'Could not send link. Try again shortly.', false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send Link'; }
+  }
+}
+
+function showMagicMsg(msg, ok) {
+  const el = q('#magic-msg');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = ok ? '#6EE7B7' : '#F9A8D4';
+  el.classList.remove('hidden');
+}
 
 function loginError(msg) {
   const el = q('#login-error');
