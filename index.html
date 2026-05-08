@@ -200,13 +200,53 @@
       <button id="login-btn" onclick="handleLogin()" class="btn btn-primary w-full justify-center">
         Sign In
       </button>
-      <button id="demo-btn" onclick="enterDemoMode()" class="btn btn-ghost w-full justify-center mt-2">
+      <button id="demo-btn" type="button" class="btn btn-ghost w-full justify-center mt-2">
         Preview Demo Mode
       </button>
     </div>
     <p class="text-center text-xs mt-4" style="color:#1F2937;">GoIndigo CRM v1.0 · Powered by Supabase</p>
   </div>
 </div>
+<script>
+// Self-contained demo button — runs immediately, zero dependencies
+(function() {
+  var btn = document.getElementById('demo-btn');
+  if (!btn) return;
+  btn.onclick = function() {
+    // Hide login, show app
+    var login = document.getElementById('login-screen');
+    var app   = document.getElementById('app');
+    if (login) login.style.display = 'none';
+    if (app)   app.style.display   = 'block';
+    // Header
+    var hName = document.getElementById('header-name');
+    var hComp = document.getElementById('header-company');
+    if (hName) hName.textContent = 'Bob Martinez';
+    if (hComp) hComp.textContent = 'GoIndigo Tampa (Demo)';
+    // Demo banner
+    var banner = document.getElementById('setup-banner-app');
+    if (banner) banner.classList.remove('hidden');
+    // Hide admin button
+    var adminBtn = document.getElementById('admin-panel-btn');
+    if (adminBtn) adminBtn.style.display = 'none';
+    // Call main demo init if available, otherwise mark as loaded
+    if (typeof enterDemoMode === 'function') {
+      enterDemoMode();
+    } else if (typeof buildKanbanColumns === 'function') {
+      window.DEMO_MODE = true;
+      window.currentUser    = { id: 'demo-client-001', email: 'demo@goindigo.io' };
+      window.currentProfile = { id:'demo-client-001', full_name:'Bob Martinez', company:'GoIndigo Tampa', role:'client' };
+      window.allLeads = typeof makeDemoLeads === 'function'
+        ? makeDemoLeads().filter(function(l){ return l.client_id === 'demo-client-001'; })
+        : [];
+      buildKanbanColumns();
+      if (typeof buildMobileFilter === 'function') buildMobileFilter();
+      if (typeof renderAllCards === 'function') renderAllCards();
+      if (typeof updateStats === 'function') updateStats();
+    }
+  };
+})();
+</script>
 
 <!-- ================================================================
      MAIN APP
