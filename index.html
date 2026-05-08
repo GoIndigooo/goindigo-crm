@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoIndigo CRM</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  /* ── Base ── */
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    background: #05050F;
+    color: #E2E8F0;
+    font-family: 'Inter', system-ui, sans-serif;
+    margin: 0;
+    background-image:
+      linear-gradient(rgba(99,102,241,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,102,241,.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* ── Cyberpunk glow utilities ── */
+  .glow-indigo { box-shadow: 0 0 16px rgba(99,102,241,.45), 0 0 40px rgba(99,102,241,.15); }
+  .glow-cyan   { box-shadow: 0 0 16px rgba(6,182,212,.45), 0 0 40px rgba(6,182,212,.15); }
+  .text-glow   { text-shadow: 0 0 12px currentColor; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #0D0D1A; }
+  ::-webkit-scrollbar-thumb { background: #6366F1; border-radius: 3px; }
+
+  /* ── Kanban ── */
+  .kanban-board { display: flex; gap: 12px; padding: 16px; overflow-x: auto; min-height: calc(100vh - 160px); align-items: flex-start; }
+  .kanban-col { flex: 0 0 260px; background: #0D0D1A; border: 1px solid rgba(99,102,241,.18); border-radius: 10px; display: flex; flex-direction: column; max-height: calc(100vh - 180px); }
+  .kanban-col-header { padding: 12px 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(99,102,241,.15); }
+  .kanban-col-body { padding: 8px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; min-height: 60px; }
+  .kanban-col.drag-over { outline: 2px dashed #6366F1; outline-offset: -3px; box-shadow: inset 0 0 20px rgba(99,102,241,.08); }
+
+  /* ── Lead Card ── */
+  .lead-card { background: #13132A; border-radius: 8px; padding: 10px 12px; cursor: grab; border-left: 3px solid transparent; transition: transform .15s, box-shadow .15s; user-select: none; border: 1px solid rgba(99,102,241,.12); border-left-width: 3px; }
+  .lead-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(99,102,241,.25), 0 0 8px rgba(99,102,241,.1); }
+  .lead-card.dragging { opacity: .5; cursor: grabbing; }
+  .lead-card-name { font-weight: 600; font-size: .875rem; color: #F1F5F9; }
+  .lead-card-phone { font-size: .75rem; color: #818CF8; margin-top: 2px; }
+  .lead-card-meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .lead-card-age { font-size: .7rem; color: #4B5563; margin-left: auto; }
+  .lead-card-value { font-size: .75rem; color: #34D399; font-weight: 600; }
+
+  /* ── Service Tags ── */
+  .tag { font-size: .65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .03em; }
+  .tag-water { background: rgba(99,102,241,.2); color: #818CF8; border: 1px solid rgba(99,102,241,.3); }
+  .tag-mold  { background: rgba(16,185,129,.15); color: #6EE7B7; border: 1px solid rgba(16,185,129,.25); }
+  .tag-fire  { background: rgba(236,72,153,.15); color: #F9A8D4; border: 1px solid rgba(236,72,153,.25); }
+  .tag-storm { background: rgba(6,182,212,.15); color: #67E8F9; border: 1px solid rgba(6,182,212,.25); }
+  .tag-other { background: rgba(75,85,99,.3); color: #9CA3AF; border: 1px solid rgba(75,85,99,.4); }
+
+  /* ── Modal ── */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.75); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+  .modal-box { background: #0D0D1A; border: 1px solid rgba(99,102,241,.25); border-radius: 12px; width: 100%; max-width: 540px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.8), 0 0 30px rgba(99,102,241,.1); }
+  .modal-box.modal-lg { max-width: 680px; }
+  .modal-header { padding: 18px 20px; border-bottom: 1px solid rgba(99,102,241,.15); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+  .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+  .modal-footer { padding: 14px 20px; border-top: 1px solid rgba(99,102,241,.15); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
+
+  /* ── Form elements ── */
+  .form-label { font-size: .75rem; font-weight: 600; color: #818CF8; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; display: block; }
+  .form-input { width: 100%; background: #05050F; border: 1px solid rgba(99,102,241,.25); color: #E2E8F0; border-radius: 6px; padding: 8px 10px; font-size: .875rem; outline: none; transition: border-color .15s, box-shadow .15s; }
+  .form-input:focus { border-color: #6366F1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+  .form-input::placeholder { color: #374151; }
+  textarea.form-input { resize: vertical; min-height: 70px; }
+  select.form-input { cursor: pointer; }
+  .form-group { margin-bottom: 14px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── Buttons ── */
+  .btn { padding: 8px 16px; border-radius: 7px; font-size: .875rem; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s, transform .1s, box-shadow .15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { opacity: .88; }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: #6366F1; color: #fff; box-shadow: 0 0 12px rgba(99,102,241,.4); }
+  .btn-primary:hover { box-shadow: 0 0 20px rgba(99,102,241,.6); }
+  .btn-success { background: #10B981; color: #fff; }
+  .btn-danger  { background: #EC4899; color: #fff; box-shadow: 0 0 10px rgba(236,72,153,.3); }
+  .btn-ghost   { background: transparent; color: #818CF8; border: 1px solid rgba(99,102,241,.3); }
+  .btn-ghost:hover { border-color: #6366F1; background: rgba(99,102,241,.08); opacity: 1; }
+  .btn-sm { padding: 5px 11px; font-size: .8rem; }
+
+  /* ── Stats bar ── */
+  .stat-card { background: #0D0D1A; border: 1px solid rgba(99,102,241,.15); border-radius: 8px; padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; transition: border-color .2s; }
+  .stat-card:hover { border-color: rgba(99,102,241,.4); }
+  .stat-value { font-size: 1.25rem; font-weight: 700; color: #F1F5F9; }
+  .stat-label { font-size: .7rem; color: #4B5563; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ── Toast ── */
+  #toast-container { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 999; }
+  .toast { background: #0D0D1A; border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 12px 16px; font-size: .875rem; max-width: 320px; animation: slideIn .2s ease; box-shadow: 0 4px 20px rgba(0,0,0,.6), 0 0 12px rgba(99,102,241,.1); }
+  .toast-success { border-left: 3px solid #10B981; }
+  .toast-error   { border-left: 3px solid #EC4899; }
+  .toast-info    { border-left: 3px solid #06B6D4; }
+  @keyframes slideIn { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: none; } }
+
+  /* ── Spinner ── */
+  .spinner { width: 18px; height: 18px; border: 2px solid rgba(99,102,241,.2); border-top-color: #6366F1; border-radius: 50%; animation: spin .6s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Badge ── */
+  .badge { background: rgba(99,102,241,.2); color: #818CF8; border: 1px solid rgba(99,102,241,.3); border-radius: 9999px; padding: 1px 8px; font-size: .72rem; font-weight: 700; min-width: 22px; text-align: center; }
+
+  /* ── Timeline ── */
+  .timeline-item { display: flex; gap: 10px; padding: 6px 0; position: relative; }
+  .timeline-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .timeline-line { width: 1px; background: rgba(99,102,241,.2); position: absolute; left: 4px; top: 20px; bottom: 0; }
+
+  /* ── Setup banner ── */
+  .setup-banner { background: linear-gradient(135deg, #0d0d2a, #0a0a1e); border: 1px solid rgba(99,102,241,.35); border-radius: 10px; padding: 16px 20px; margin: 12px 16px; box-shadow: 0 0 20px rgba(99,102,241,.08); }
+
+  /* ── Mobile ── */
+  @media (max-width: 768px) {
+    .kanban-board { padding: 8px; flex-direction: column; overflow-x: hidden; }
+    .kanban-col { flex: none; width: 100%; max-height: 400px; }
+    .kanban-col.mobile-hidden { display: none; }
+    .kanban-col.mobile-active { display: flex; }
+    .form-grid { grid-template-columns: 1fr; }
+    .stats-bar { grid-template-columns: repeat(3, 1fr) !important; }
+  }
+
+  /* ── Admin tabs ── */
+  .admin-tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: .875rem; font-weight: 600; color: #818CF8; background: transparent; border: none; transition: background .15s, color .15s; }
+  .admin-tab.active { background: #6366F1; color: #fff; box-shadow: 0 0 12px rgba(99,102,241,.4); }
+  .admin-tab:hover:not(.active) { background: rgba(99,102,241,.12); color: #F1F5F9; }
+
+  /* ── Stage color dots ── */
+  .stage-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Empty state ── */
+  .empty-state { text-align: center; padding: 20px 10px; color: #374151; font-size: .8rem; }
+
+  /* ── Header border glow ── */
+  header { border-bottom: 1px solid rgba(99,102,241,.25) !important; box-shadow: 0 1px 20px rgba(99,102,241,.08); }
+
+  /* ── Indigo HR divider ── */
+  .cyber-divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(99,102,241,.5), rgba(6,182,212,.4), transparent); border: none; margin: 10px 0; }
+
+  /* ── Neon corner accent on logo ── */
+  .logo-accent { position: relative; display: inline-block; }
+  .logo-accent::after {
+    content: '';
+    position: absolute;
+    bottom: -2px; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #6366F1, #06B6D4);
+    border-radius: 1px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     LOADING SCREEN
+================================================================ -->
+<div id="loading-screen" class="hidden fixed inset-0 flex items-center justify-center z-50" style="background:#05050F;">
+  <div class="text-center">
+    <div class="text-3xl font-black mb-1" style="color:#6366F1;text-shadow:0 0 20px rgba(99,102,241,.8);">GoIndigo</div>
+    <div class="text-sm mb-4" style="color:#06B6D4;letter-spacing:.15em;text-shadow:0 0 10px rgba(6,182,212,.6);">CRM PORTAL</div>
+    <div class="spinner mx-auto" style="width:32px;height:32px;border-width:3px;"></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     LOGIN SCREEN
+================================================================ -->
+<div id="login-screen" class="fixed inset-0 flex items-center justify-center" style="background:#05050F;">
+  <div class="w-full max-w-sm px-6">
+    <div class="text-center mb-8">
+      <div class="text-5xl font-black mb-1 logo-accent" style="color:#6366F1;text-shadow:0 0 24px rgba(99,102,241,.7);">GoIndigo</div>
+      <div class="text-sm font-semibold mt-3" style="color:#06B6D4;letter-spacing:.2em;text-shadow:0 0 10px rgba(6,182,212,.5);">CRM PORTAL</div>
+      <div class="text-xs mt-1" style="color:#4B5563;letter-spacing:.1em;">LEAD INTELLIGENCE · PIPELINE TRACKING</div>
+    </div>
+    <div id="setup-banner-login" class="hidden setup-banner mb-6">
+      <div class="font-semibold text-sm mb-1" style="color:#818CF8;">⚙ Supabase Not Configured</div>
+      <div class="text-xs leading-relaxed" style="color:#94A3B8;">
+        Replace <code style="color:#06B6D4;">YOUR_SUPABASE_PROJECT_URL</code> and <code style="color:#06B6D4;">YOUR_SUPABASE_ANON_KEY</code>
+        in the &lt;script&gt; section of index.html to connect to your database.
+        <br><br>Use the <strong class="text-white">Demo Mode</strong> button below to preview the UI with sample data.
+      </div>
+    </div>
+    <div class="rounded-xl p-6 shadow-2xl" style="background:#0D0D1A;border:1px solid rgba(99,102,241,.25);box-shadow:0 20px 60px rgba(0,0,0,.8),0 0 30px rgba(99,102,241,.1);">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input id="login-email" type="email" class="form-input" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input id="login-password" type="password" class="form-input" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div id="login-error" class="hidden text-sm mb-3" style="color:#F9A8D4;"></div>
+      <button id="login-btn" onclick="handleLogin()" class="btn btn-primary w-full justify-center">
+        Sign In
+      </button>
+      <button id="demo-btn" onclick="enterDemoMode()" class="btn btn-ghost w-full justify-center mt-2">
+        Preview Demo Mode
+      </button>
+    </div>
+    <p class="text-center text-xs mt-4" style="color:#1F2937;">GoIndigo CRM v1.0 · Powered by Supabase</p>
+  </div>
+</div>
+
+<!-- ================================================================
+     MAIN APP
+================================================================ -->
+<div id="app" class="hidden">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-40" style="background:rgba(5,5,15,.95);backdrop-filter:blur(12px);">
+    <div class="flex items-center gap-3 px-4 py-3">
+      <div class="text-xl font-black flex-shrink-0 logo-accent" style="color:#6366F1;text-shadow:0 0 16px rgba(99,102,241,.6);">
+        GoIndigo <span style="color:#374151;font-weight:400;font-size:.85rem;">CRM</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div id="header-name" class="text-sm font-semibold truncate" style="color:#E2E8F0;"></div>
+        <div id="header-company" class="text-xs truncate" style="color:#4B5563;"></div>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button id="admin-panel-btn" onclick="openAdminPanel()" class="hidden btn btn-ghost btn-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+          Admin
+        </button>
+        <button onclick="exportConversions()" class="btn btn-ghost btn-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <span class="hidden sm:inline">Export</span>
+        </button>
+        <button onclick="openAddLeadModal()" class="btn btn-primary btn-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span class="hidden sm:inline">Add Lead</span>
+        </button>
+        <button onclick="handleLogout()" class="btn btn-ghost btn-sm" style="color:#4B5563;" title="Logout">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div id="stats-bar" class="grid grid-cols-3 sm:grid-cols-6 gap-2 px-4 pb-3 stats-bar">
+      <div class="stat-card">
+        <div id="stat-total" class="stat-value">–</div>
+        <div class="stat-label">Total Leads</div>
+      </div>
+      <div class="stat-card">
+        <div id="stat-contacted" class="stat-value">–</div>
+        <div class="stat-label">Contacted</div>
+      </div>
+      <div class="stat-card">
+        <div id="stat-estimates" class="stat-value">–</div>
+        <div class="stat-label">Estimates</div>
+      </div>
+      <div class="stat-card">
+        <div id="stat-won" class="stat-value">–</div>
+        <div class="stat-label">Jobs Won</div>
+      </div>
+      <div class="stat-card">
+        <div id="stat-revenue" class="stat-value" style="color:#34D399;">–</div>
+        <div class="stat-label">Revenue</div>
+      </div>
+      <div class="stat-card">
+        <div id="stat-winrate" class="stat-value" style="color:#818CF8;">–</div>
+        <div class="stat-label">Win Rate</div>
+      </div>
+    </div>
+
+    <!-- Mobile stage filter -->
+    <div id="mobile-stage-filter" class="sm:hidden overflow-x-auto flex gap-2 px-4 pb-3">
+      <!-- populated by JS -->
+    </div>
+  </header>
+
+  <!-- Setup banner (in-app) -->
+  <div id="setup-banner-app" class="hidden setup-banner mx-4 mt-3">
+    <div class="flex items-start gap-3">
+      <div>
+        <div class="font-semibold text-sm mb-1" style="color:#818CF8;">⚙ Demo Mode — Supabase Not Configured</div>
+        <div class="text-xs leading-relaxed" style="color:#94A3B8;">
+          You're viewing sample data. To connect your database, edit index.html and replace
+          <code style="color:#06B6D4;">YOUR_SUPABASE_PROJECT_URL</code> and <code style="color:#06B6D4;">YOUR_SUPABASE_ANON_KEY</code>
+          with your project credentials, then run <code style="color:#06B6D4;">supabase-setup.sql</code> in the Supabase SQL editor.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kanban Board -->
+  <div id="kanban-board" class="kanban-board"></div>
+</div>
+
+<!-- ================================================================
+     MODALS
+================================================================ -->
+
+<!-- Add Lead Modal -->
+<div id="modal-add-lead" class="modal-backdrop hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 class="text-lg font-bold" style="color:#818CF8;">Add New Lead</h2>
+      <button onclick="closeModal('modal-add-lead')" class="hover:text-white" style="color:#4B5563;">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Name *</label>
+          <input id="add-name" class="form-input" placeholder="John Smith">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone *</label>
+          <input id="add-phone" class="form-input" placeholder="555-555-5555">
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input id="add-email" type="email" class="form-input" placeholder="john@email.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Service</label>
+          <select id="add-service" class="form-input">
+            <option value="">Select service…</option>
+            <option value="water">Water Damage</option>
+            <option value="mold">Mold Remediation</option>
+            <option value="fire">Fire/Smoke Damage</option>
+            <option value="storm">Storm Damage</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <input id="add-address" class="form-input" placeholder="123 Main St, City, FL">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea id="add-description" class="form-input" placeholder="Describe the damage…"></textarea>
+      </div>
+      <hr class="cyber-divider">
+      <div class="text-xs font-semibold uppercase tracking-wider mb-3" style="color:#4B5563;letter-spacing:.1em;">Attribution (optional)</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Google Click ID (gclid)</label>
+          <input id="add-gclid" class="form-input" placeholder="Cj0KCQjw…">
+        </div>
+        <div class="form-group">
+          <label class="form-label">UTM Campaign</label>
+          <input id="add-utm-campaign" class="form-input" placeholder="water-damage-tampa">
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">UTM Term</label>
+          <input id="add-utm-term" class="form-input" placeholder="water damage repair">
+        </div>
+        <div class="form-group">
+          <label class="form-label">UTM Content</label>
+          <input id="add-utm-content" class="form-input" placeholder="ad-variant-a">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modal-add-lead')" class="btn btn-ghost">Cancel</button>
+      <button id="add-lead-submit-btn" onclick="submitAddLead()" class="btn btn-primary">Add Lead</button>
+    </div>
+  </div>
+</div>
+
+<!-- Job Won Value Modal -->
+<div id="modal-job-value" class="modal-backdrop hidden">
+  <div class="modal-box" style="max-width:380px">
+    <div class="modal-header">
+      <h2 class="text-lg font-bold text-green-400">🎉 Job Won!</h2>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm mb-4" style="color:#94A3B8;">Congratulations! Please enter the estimated job value to record this conversion.</p>
+      <div class="form-group">
+        <label class="form-label">Job Value ($) *</label>
+        <input id="job-value-input" type="number" min="0" step="0.01" class="form-input text-lg font-bold" placeholder="0.00">
+      </div>
+      <p id="job-value-error" class="hidden text-xs mt-1" style="color:#F9A8D4;">Please enter a job value to continue.</p>
+    </div>
+    <div class="modal-footer">
+      <button onclick="cancelJobWon()" class="btn btn-ghost">Cancel</button>
+      <button onclick="confirmJobWon()" class="btn btn-success">Confirm Win</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lost Reason Modal -->
+<div id="modal-lost-reason" class="modal-backdrop hidden">
+  <div class="modal-box" style="max-width:380px">
+    <div class="modal-header">
+      <h2 class="text-lg font-bold" style="color:#94A3B8;">Mark as Lost</h2>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Reason (optional)</label>
+        <select id="lost-reason-input" class="form-input">
+          <option value="">Select reason…</option>
+          <option value="price">Price — too expensive</option>
+          <option value="competitor">Chose competitor</option>
+          <option value="no_response">No response / ghosted</option>
+          <option value="not_ready">Not ready yet</option>
+          <option value="insurance">Insurance denied</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="cancelLost()" class="btn btn-ghost">Cancel</button>
+      <button onclick="confirmLost()" class="btn btn-danger">Mark Lost</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lead Detail Modal -->
+<div id="modal-lead-detail" class="modal-backdrop hidden">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <div>
+        <h2 id="detail-name" class="text-lg font-bold"></h2>
+        <div id="detail-stage-badge" class="text-xs mt-0.5" style="color:#4B5563;"></div>
+      </div>
+      <button onclick="closeModal('modal-lead-detail')" class="hover:text-white" style="color:#4B5563;">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Contact info -->
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <div class="form-label">Phone</div>
+          <div id="detail-phone" class="text-sm" style="color:#818CF8;"></div>
+        </div>
+        <div>
+          <div class="form-label">Email</div>
+          <div id="detail-email" class="text-sm break-all" style="color:#E2E8F0;"></div>
+        </div>
+        <div class="col-span-2">
+          <div class="form-label">Address</div>
+          <div id="detail-address" class="text-sm" style="color:#E2E8F0;"></div>
+        </div>
+        <div>
+          <div class="form-label">Service</div>
+          <div id="detail-service" class="text-sm"></div>
+        </div>
+        <div>
+          <div class="form-label">Job Value</div>
+          <div id="detail-value" class="text-sm font-bold text-green-400"></div>
+        </div>
+        <div class="col-span-2">
+          <div class="form-label">Description</div>
+          <div id="detail-description" class="text-sm leading-relaxed" style="color:#E2E8F0;"></div>
+        </div>
+      </div>
+
+      <!-- Stage selector -->
+      <div class="form-group">
+        <label class="form-label">Pipeline Stage</label>
+        <select id="detail-stage-select" class="form-input" onchange="changeStageFromDetail(this.value)">
+          <option value="new_lead">New Lead</option>
+          <option value="contacted">Contacted</option>
+          <option value="estimate_scheduled">Estimate Scheduled</option>
+          <option value="estimate_completed">Estimate Completed</option>
+          <option value="job_won">Job Won</option>
+          <option value="job_complete">Job Complete</option>
+          <option value="lost">Lost</option>
+        </select>
+      </div>
+
+      <!-- Notes -->
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea id="detail-notes" class="form-input" placeholder="Add notes…" oninput="scheduleNotesSave()" style="min-height:80px;"></textarea>
+        <div id="notes-save-indicator" class="text-xs mt-1 hidden" style="color:#4B5563;">Saving…</div>
+      </div>
+
+      <!-- Attribution -->
+      <div class="rounded-lg p-3 mb-4" style="border:1px solid rgba(99,102,241,.15);background:rgba(99,102,241,.04);">
+        <div class="text-xs font-semibold uppercase tracking-wider mb-2" style="color:#4B5563;">Google Ads Attribution</div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div><span style="color:#4B5563;">gclid: </span><span id="detail-gclid" class="font-mono break-all" style="color:#E2E8F0;"></span></div>
+          <div><span style="color:#4B5563;">source: </span><span id="detail-utm-source" style="color:#E2E8F0;"></span></div>
+          <div><span style="color:#4B5563;">campaign: </span><span id="detail-utm-campaign" style="color:#E2E8F0;"></span></div>
+          <div><span style="color:#4B5563;">term: </span><span id="detail-utm-term" style="color:#E2E8F0;"></span></div>
+          <div><span style="color:#4B5563;">medium: </span><span id="detail-utm-medium" style="color:#E2E8F0;"></span></div>
+          <div><span style="color:#4B5563;">content: </span><span id="detail-utm-content" style="color:#E2E8F0;"></span></div>
+        </div>
+      </div>
+
+      <!-- Stage History Timeline -->
+      <div class="form-label mb-2">Stage History</div>
+      <div id="detail-history" class="space-y-1">
+        <div class="text-xs" style="color:#4B5563;">Loading…</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="detail-delete-btn" onclick="deleteLead()" class="btn btn-danger btn-sm hidden mr-auto">Delete Lead</button>
+      <button onclick="closeModal('modal-lead-detail')" class="btn btn-ghost">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Panel Modal -->
+<div id="modal-admin" class="modal-backdrop hidden">
+  <div class="modal-box modal-lg" style="max-width:760px;">
+    <div class="modal-header">
+      <h2 class="text-lg font-bold" style="color:#818CF8;">Admin Panel</h2>
+      <button onclick="closeModal('modal-admin')" class="hover:text-white" style="color:#4B5563;">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="flex gap-2 mb-4">
+        <button class="admin-tab active" onclick="switchAdminTab('all-leads', this)">All Leads</button>
+        <button class="admin-tab" onclick="switchAdminTab('clients', this)">Manage Clients</button>
+      </div>
+      <div id="admin-tab-all-leads">
+        <div id="admin-leads-list" class="space-y-3">
+          <div class="flex items-center gap-2"><div class="spinner"></div><span class="text-sm" style="color:#4B5563;">Loading…</span></div>
+        </div>
+      </div>
+      <div id="admin-tab-clients" class="hidden">
+        <div class="flex justify-between items-center mb-3">
+          <div class="text-sm" style="color:#4B5563;">All registered client profiles</div>
+          <button onclick="openCreateClientModal()" class="btn btn-primary btn-sm">+ New Client</button>
+        </div>
+        <div id="admin-clients-list" class="space-y-2">
+          <div class="flex items-center gap-2"><div class="spinner"></div><span class="text-sm" style="color:#4B5563;">Loading…</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Client Modal -->
+<div id="modal-create-client" class="modal-backdrop hidden">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="modal-header">
+      <h2 class="text-lg font-bold" style="color:#818CF8;">Create Client Account</h2>
+      <button onclick="closeModal('modal-create-client')" class="hover:text-white" style="color:#4B5563;">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="setup-banner mb-4">
+        <div class="text-xs" style="color:#818CF8;">This creates a new Supabase Auth user. The client will receive a confirmation email and can log in immediately with these credentials.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input id="create-client-name" class="form-input" placeholder="Jane Smith">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Company</label>
+        <input id="create-client-company" class="form-input" placeholder="GoIndigo Tampa">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email *</label>
+        <input id="create-client-email" type="email" class="form-input" placeholder="jane@goindigo.io">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Temporary Password *</label>
+        <input id="create-client-password" type="password" class="form-input" placeholder="Min 6 characters">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeModal('modal-create-client')" class="btn btn-ghost">Cancel</button>
+      <button onclick="submitCreateClient()" class="btn btn-primary">Create Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ================================================================
+     JAVASCRIPT
+================================================================ -->
+<script>
+// ──────────────────────────────────────────────────────────────────
+// CONFIG — Replace with your actual Supabase credentials
+// ──────────────────────────────────────────────────────────────────
+const SUPABASE_URL      = 'https://fsdqkrgqheekrgphhuqx.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzZHFrcmdxaGVla3JncGhodXF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODAwNzksImV4cCI6MjA5Mzc1NjA3OX0.9Ot3KAEYGHeX3IAolqb8V-dFSazcSHn6K-QVlkN4850';
+
+// ──────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ──────────────────────────────────────────────────────────────────
+let DEMO_MODE = (SUPABASE_URL === 'YOUR_SUPABASE_PROJECT_URL');
+
+const STAGES = [
+  { key: 'new_lead',           label: 'New Lead',            color: '#6366F1' },
+  { key: 'contacted',          label: 'Contacted',           color: '#06B6D4' },
+  { key: 'estimate_scheduled', label: 'Estimate Scheduled',  color: '#8B5CF6' },
+  { key: 'estimate_completed', label: 'Estimate Completed',  color: '#EC4899' },
+  { key: 'job_won',            label: 'Job Won',             color: '#10B981' },
+  { key: 'job_complete',       label: 'Job Complete',        color: '#34D399' },
+  { key: 'lost',               label: 'Lost',                color: '#374151' },
+];
+
+const SERVICE_META = {
+  water: { label: 'Water',  cls: 'tag-water' },
+  mold:  { label: 'Mold',   cls: 'tag-mold'  },
+  fire:  { label: 'Fire',   cls: 'tag-fire'  },
+  storm: { label: 'Storm',  cls: 'tag-storm' },
+  other: { label: 'Other',  cls: 'tag-other' },
+};
+
+// ──────────────────────────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────────────────────────
+let supabase       = null;
+let currentUser    = null;
+let currentProfile = null;
+let allLeads       = [];
+let draggedLeadId  = null;
+let pendingStage   = null;
+let pendingLeadId  = null;
+let detailLeadId   = null;
+let notesSaveTimer = null;
+let mobileActiveStage = 'new_lead';
+
+// ──────────────────────────────────────────────────────────────────
+// DEMO DATA
+// ──────────────────────────────────────────────────────────────────
+const DEMO_PROFILES = [
+  { id: 'demo-admin-001',  full_name: 'Admin User',      company: 'GoIndigo HQ',      role: 'admin'  },
+  { id: 'demo-client-001', full_name: 'Bob Martinez',    company: 'GoIndigo Tampa',   role: 'client' },
+  { id: 'demo-client-002', full_name: 'Sara Johnson',    company: 'GoIndigo Orlando', role: 'client' },
+];
+
+function makeDemoLeads() {
+  const now = new Date();
+  const daysAgo = d => new Date(now - d * 86400000).toISOString();
+  return [
+    { id:'lead-001', client_id:'demo-client-001', name:'Mark Johnson',   phone:'813-555-0101', email:'mark@email.com',  address:'100 Oak St, Tampa FL',    service:'water', description:'Burst pipe under kitchen sink.',   stage:'new_lead',           job_value:null,    gclid:null,               utm_source:'google', utm_campaign:'water-damage-tampa',  utm_term:'water damage repair', utm_medium:'cpc', utm_content:null, notes:'', created_at:daysAgo(1),  updated_at:daysAgo(1)  },
+    { id:'lead-002', client_id:'demo-client-001', name:'Linda Park',     phone:'813-555-0102', email:'linda@email.com', address:'200 Pine Ave, Tampa FL',  service:'mold',  description:'Black mold found in bathroom walls.', stage:'contacted',          job_value:null,    gclid:'Cj0KCQjwDEMOtest01', utm_source:'google', utm_campaign:'mold-removal-tampa',  utm_term:'mold removal',       utm_medium:'cpc', utm_content:'ad-a', notes:'Left voicemail, called back.',          created_at:daysAgo(3),  updated_at:daysAgo(2)  },
+    { id:'lead-003', client_id:'demo-client-001', name:'Chris Webb',     phone:'813-555-0103', email:'chris@email.com', address:'300 Elm Rd, Tampa FL',    service:'fire',  description:'Kitchen fire smoke and soot damage.',  stage:'estimate_scheduled', job_value:null,    gclid:'Cj0KCQjwDEMOtest02', utm_source:'google', utm_campaign:'fire-damage-tampa',   utm_term:'fire damage repair', utm_medium:'cpc', utm_content:null, notes:'Scheduled for Thursday 2pm.',           created_at:daysAgo(5),  updated_at:daysAgo(1)  },
+    { id:'lead-004', client_id:'demo-client-001', name:'Amy Torres',     phone:'813-555-0104', email:'amy@email.com',   address:'400 Maple Dr, Tampa FL',  service:'water', description:'Roof leak causing ceiling damage.',    stage:'estimate_completed', job_value:null,    gclid:'Cj0KCQjwDEMOtest03', utm_source:'google', utm_campaign:'water-damage-tampa',  utm_term:'roof leak damage',  utm_medium:'cpc', utm_content:null, notes:'Estimate sent: $4,200.',                created_at:daysAgo(7),  updated_at:daysAgo(2)  },
+    { id:'lead-005', client_id:'demo-client-001', name:'David Kim',      phone:'813-555-0105', email:'david@email.com', address:'500 Cedar Ln, Tampa FL',  service:'storm', description:'Hurricane wind damage to exterior.',   stage:'job_won',            job_value:8200.00, gclid:'Cj0KCQjwDEMOtest04', utm_source:'google', utm_campaign:'storm-damage-tampa',  utm_term:'storm damage',      utm_medium:'cpc', utm_content:'ad-b', notes:'Signed contract. Starting Monday.',     created_at:daysAgo(10), updated_at:daysAgo(3)  },
+    { id:'lead-006', client_id:'demo-client-001', name:'Rachel Green',   phone:'813-555-0106', email:'rachel@email.com',address:'600 Birch Blvd, Tampa FL', service:'water', description:'Flooding in basement after rain.',     stage:'job_complete',       job_value:5500.00, gclid:'Cj0KCQjwDEMOtest05', utm_source:'google', utm_campaign:'water-damage-tampa',  utm_term:'basement flooding', utm_medium:'cpc', utm_content:null, notes:'Job complete. Invoice sent.',           created_at:daysAgo(14), updated_at:daysAgo(1)  },
+    { id:'lead-007', client_id:'demo-client-002', name:'Emma Davis',     phone:'407-555-0201', email:'emma@email.com',  address:'10 Lake St, Orlando FL',  service:'water', description:'Flooded basement from broken pipe.',   stage:'new_lead',           job_value:null,    gclid:null,               utm_source:'google', utm_campaign:'water-damage-orlando',utm_term:'flooded basement',  utm_medium:'cpc', utm_content:null, notes:'', created_at:daysAgo(0.5),updated_at:daysAgo(0.5)},
+    { id:'lead-008', client_id:'demo-client-002', name:'Frank Wilson',   phone:'407-555-0202', email:'frank@email.com', address:'20 River Rd, Orlando FL', service:'mold',  description:'Mold growing after flood damage.',     stage:'estimate_completed', job_value:null,    gclid:'Cj0KCQjwDEMOtest06', utm_source:'google', utm_campaign:'mold-removal-orlando',utm_term:'mold remediation',  utm_medium:'cpc', utm_content:null, notes:'Sent estimate $3,800.',                 created_at:daysAgo(6),  updated_at:daysAgo(2)  },
+    { id:'lead-009', client_id:'demo-client-002', name:'Grace Lee',      phone:'407-555-0203', email:'grace@email.com', address:'30 Bay Blvd, Orlando FL', service:'fire',  description:'Electrical fire in garage.',           stage:'job_won',            job_value:6700.00, gclid:'Cj0KCQjwDEMOtest07', utm_source:'google', utm_campaign:'fire-damage-orlando', utm_term:'fire restoration',  utm_medium:'cpc', utm_content:'ad-c', notes:'Starting restoration next week.',       created_at:daysAgo(8),  updated_at:daysAgo(2)  },
+    { id:'lead-010', client_id:'demo-client-002', name:'Henry Brown',    phone:'407-555-0204', email:'henry@email.com', address:'40 Hill Ave, Orlando FL', service:'storm', description:'Tree fell on roof in last storm.',     stage:'lost',               job_value:null,    gclid:null,               utm_source:'google', utm_campaign:'storm-damage-orlando',utm_term:'tree damage roof',  utm_medium:'cpc', utm_content:null, notes:'Insurance denied claim.',               created_at:daysAgo(12), updated_at:daysAgo(5)  },
+  ];
+}
+
+const DEMO_HISTORY = [
+  { id:'hist-001', lead_id:'lead-002', from_stage:'new_lead',           to_stage:'contacted',          job_value:null,    changed_at: new Date(Date.now()-2*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-002', lead_id:'lead-003', from_stage:'new_lead',           to_stage:'contacted',          job_value:null,    changed_at: new Date(Date.now()-4*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-003', lead_id:'lead-003', from_stage:'contacted',          to_stage:'estimate_scheduled', job_value:null,    changed_at: new Date(Date.now()-1*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-004', lead_id:'lead-004', from_stage:'new_lead',           to_stage:'contacted',          job_value:null,    changed_at: new Date(Date.now()-6*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-005', lead_id:'lead-004', from_stage:'contacted',          to_stage:'estimate_scheduled', job_value:null,    changed_at: new Date(Date.now()-5*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-006', lead_id:'lead-004', from_stage:'estimate_scheduled', to_stage:'estimate_completed', job_value:null,    changed_at: new Date(Date.now()-2*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-007', lead_id:'lead-005', from_stage:'new_lead',           to_stage:'contacted',          job_value:null,    changed_at: new Date(Date.now()-9*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-008', lead_id:'lead-005', from_stage:'contacted',          to_stage:'estimate_scheduled', job_value:null,    changed_at: new Date(Date.now()-8*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-009', lead_id:'lead-005', from_stage:'estimate_scheduled', to_stage:'estimate_completed', job_value:null,    changed_at: new Date(Date.now()-7*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-010', lead_id:'lead-005', from_stage:'estimate_completed', to_stage:'job_won',            job_value:8200.00, changed_at: new Date(Date.now()-3*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-011', lead_id:'lead-006', from_stage:'job_won',            to_stage:'job_complete',       job_value:5500.00, changed_at: new Date(Date.now()-1*86400000).toISOString(), changed_by:'demo-client-001' },
+  { id:'hist-012', lead_id:'lead-008', from_stage:'new_lead',           to_stage:'estimate_completed', job_value:null,    changed_at: new Date(Date.now()-2*86400000).toISOString(), changed_by:'demo-client-002' },
+  { id:'hist-013', lead_id:'lead-009', from_stage:'new_lead',           to_stage:'job_won',            job_value:6700.00, changed_at: new Date(Date.now()-2*86400000).toISOString(), changed_by:'demo-client-002' },
+  { id:'hist-014', lead_id:'lead-010', from_stage:'new_lead',           to_stage:'lost',               job_value:null,    changed_at: new Date(Date.now()-5*86400000).toISOString(), changed_by:'demo-client-002' },
+];
+
+// ──────────────────────────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  // Login screen is visible by default — no spinner blocking anything
+
+  if (DEMO_MODE) {
+    show('setup-banner-login');
+    return;
+  }
+
+  // Init Supabase silently in background
+  try {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Check if already logged in (returning user with valid token)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      show('loading-screen');
+      hide('login-screen');
+      await onSignedIn(session.user);
+    }
+
+    // Only start listening for auth changes AFTER the initial check
+    // so a SIGNED_OUT event doesn't interfere with demo mode
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (DEMO_MODE || !currentUser) return; // ignore if in demo or not yet logged in
+      if (event === 'SIGNED_IN' && session) {
+        await onSignedIn(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        showLoginScreen();
+      }
+    });
+  } catch (e) {
+    console.error('Supabase init error:', e);
+    showToast('Could not connect to database — check your credentials.', 'error');
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────
+// AUTH
+// ──────────────────────────────────────────────────────────────────
+async function handleLogin() {
+  const email    = q('#login-email').value.trim();
+  const password = q('#login-password').value;
+  if (!email || !password) { loginError('Please enter email and password.'); return; }
+
+  setLoading('login-btn', true, 'Signing in…');
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  } catch (e) {
+    loginError(e.message || 'Sign in failed.');
+    setLoading('login-btn', false, 'Sign In');
+  }
+}
+
+q('#login-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+
+function loginError(msg) {
+  const el = q('#login-error');
+  el.textContent = msg;
+  show('#login-error');
+}
+
+async function handleLogout() {
+  if (DEMO_MODE) { enterDemoMode(); return; }
+  try {
+    await supabase.auth.signOut();
+  } catch(e) {}
+}
+
+async function onSignedIn(user) {
+  currentUser = user;
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+    if (error) throw error;
+    currentProfile = profile;
+    launchApp();
+  } catch(e) {
+    try {
+      const { data, error: upsertErr } = await supabase
+        .from('profiles')
+        .upsert({ id: user.id, full_name: user.email, company: '', role: 'client' })
+        .select()
+        .single();
+      if (upsertErr) throw upsertErr;
+      currentProfile = data;
+      launchApp();
+    } catch(e2) {
+      showToast('Error loading profile: ' + e2.message, 'error');
+      hide('loading-screen');
+      show('login-screen');
+    }
+  }
+}
+
+function showLoginScreen() {
+  hide('loading-screen');
+  hide('app');
+  show('login-screen');
+  hide('#login-error');
+}
+
+// ──────────────────────────────────────────────────────────────────
+// DEMO MODE
+// ──────────────────────────────────────────────────────────────────
+function enterDemoMode() {
+  DEMO_MODE      = true;
+  currentUser    = { id: 'demo-client-001', email: 'demo@goindigo.io' };
+  currentProfile = DEMO_PROFILES[1]; // Bob Martinez, client
+  allLeads       = makeDemoLeads().filter(l => l.client_id === 'demo-client-001');
+  launchApp(true);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// APP LAUNCH
+// ──────────────────────────────────────────────────────────────────
+function launchApp(isDemo = false) {
+  hide('loading-screen');
+  hide('login-screen');
+  show('app');
+
+  q('#header-name').textContent    = currentProfile?.full_name || currentUser?.email || '';
+  q('#header-company').textContent = currentProfile?.company   || '';
+
+  if (currentProfile?.role === 'admin') show('#admin-panel-btn');
+  else hide('#admin-panel-btn');
+
+  if (isDemo || DEMO_MODE) show('#setup-banner-app');
+
+  buildKanbanColumns();
+  buildMobileFilter();
+
+  if (!isDemo) {
+    loadLeads();
+  } else {
+    renderAllCards();
+    updateStats();
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// LEADS — DB operations
+// ──────────────────────────────────────────────────────────────────
+async function loadLeads() {
+  try {
+    let query = supabase.from('leads').select('*').order('created_at', { ascending: false });
+    if (currentProfile?.role !== 'admin') {
+      query = query.eq('client_id', currentUser.id);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    allLeads = data || [];
+    renderAllCards();
+    updateStats();
+  } catch(e) {
+    showToast('Error loading leads: ' + e.message, 'error');
+  }
+}
+
+async function createLead(leadData) {
+  if (DEMO_MODE) {
+    const newLead = {
+      ...leadData,
+      id: 'lead-' + Date.now(),
+      client_id: currentUser.id,
+      stage: 'new_lead',
+      job_value: null,
+      notes: '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    allLeads.unshift(newLead);
+    renderAllCards();
+    updateStats();
+    showToast('Lead added (demo mode)', 'success');
+    return newLead;
+  }
+  try {
+    const { data, error } = await supabase
+      .from('leads')
+      .insert({ ...leadData, client_id: currentUser.id, stage: 'new_lead' })
+      .select()
+      .single();
+    if (error) throw error;
+    allLeads.unshift(data);
+    renderAllCards();
+    updateStats();
+    showToast('Lead created successfully!', 'success');
+    return data;
+  } catch(e) {
+    showToast('Error creating lead: ' + e.message, 'error');
+    return null;
+  }
+}
+
+async function updateLeadStage(leadId, newStage, extraData = {}) {
+  const lead = allLeads.find(l => l.id === leadId);
+  if (!lead) return;
+  const oldStage = lead.stage;
+
+  lead.stage = newStage;
+  if (extraData.job_value !== undefined) lead.job_value = extraData.job_value;
+  renderAllCards();
+  updateStats();
+
+  if (DEMO_MODE) {
+    DEMO_HISTORY.push({
+      id: 'hist-' + Date.now(),
+      lead_id: leadId,
+      from_stage: oldStage,
+      to_stage: newStage,
+      job_value: extraData.job_value || null,
+      changed_at: new Date().toISOString(),
+      changed_by: currentUser.id,
+    });
+    showToast('Stage updated', 'success');
+    return;
+  }
+
+  try {
+    const updatePayload = { stage: newStage, updated_at: new Date().toISOString() };
+    if (extraData.job_value !== undefined) updatePayload.job_value = extraData.job_value;
+
+    const { error } = await supabase
+      .from('leads')
+      .update(updatePayload)
+      .eq('id', leadId);
+    if (error) throw error;
+
+    await supabase.from('stage_history').insert({
+      lead_id: leadId,
+      from_stage: oldStage,
+      to_stage: newStage,
+      job_value: extraData.job_value || null,
+      changed_by: currentUser.id,
+    });
+
+    showToast('Stage updated', 'success');
+  } catch(e) {
+    lead.stage = oldStage;
+    if (extraData.job_value !== undefined) lead.job_value = null;
+    renderAllCards();
+    updateStats();
+    showToast('Error updating stage: ' + e.message, 'error');
+  }
+}
+
+async function updateLeadNotes(leadId, notes) {
+  const lead = allLeads.find(l => l.id === leadId);
+  if (lead) lead.notes = notes;
+
+  if (DEMO_MODE) {
+    q('#notes-save-indicator')?.classList.add('hidden');
+    return;
+  }
+  try {
+    const { error } = await supabase
+      .from('leads')
+      .update({ notes, updated_at: new Date().toISOString() })
+      .eq('id', leadId);
+    if (error) throw error;
+  } catch(e) {
+    showToast('Error saving notes: ' + e.message, 'error');
+  } finally {
+    q('#notes-save-indicator')?.classList.add('hidden');
+  }
+}
+
+async function deleteLead() {
+  if (!detailLeadId) return;
+  if (!confirm('Delete this lead? This cannot be undone.')) return;
+
+  const lead = allLeads.find(l => l.id === detailLeadId);
+  if (!lead) return;
+
+  if (DEMO_MODE) {
+    allLeads = allLeads.filter(l => l.id !== detailLeadId);
+    renderAllCards();
+    updateStats();
+    closeModal('modal-lead-detail');
+    showToast('Lead deleted (demo mode)', 'info');
+    return;
+  }
+
+  try {
+    const { error } = await supabase.from('leads').delete().eq('id', detailLeadId);
+    if (error) throw error;
+    allLeads = allLeads.filter(l => l.id !== detailLeadId);
+    renderAllCards();
+    updateStats();
+    closeModal('modal-lead-detail');
+    showToast('Lead deleted', 'info');
+  } catch(e) {
+    showToast('Error deleting lead: ' + e.message, 'error');
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// KANBAN BOARD
+// ──────────────────────────────────────────────────────────────────
+function buildKanbanColumns() {
+  const board = q('#kanban-board');
+  board.innerHTML = '';
+  STAGES.forEach(stage => {
+    const col = document.createElement('div');
+    col.className = 'kanban-col';
+    col.dataset.stage = stage.key;
+    col.innerHTML = `
+      <div class="kanban-col-header">
+        <div class="stage-dot" style="background:${stage.color};box-shadow:0 0 6px ${stage.color}88;"></div>
+        <span class="text-sm font-semibold flex-1" style="color:#E2E8F0;">${stage.label}</span>
+        <span class="badge" id="badge-${stage.key}">0</span>
+      </div>
+      <div class="kanban-col-body" id="col-${stage.key}"
+           ondragover="handleDragOver(event)"
+           ondragleave="handleDragLeave(event)"
+           ondrop="handleDrop(event, '${stage.key}')">
+      </div>
+    `;
+    board.appendChild(col);
+  });
+}
+
+function renderAllCards() {
+  STAGES.forEach(s => {
+    const col = q(`#col-${s.key}`);
+    if (col) col.innerHTML = '';
+    const badge = q(`#badge-${s.key}`);
+    if (badge) badge.textContent = '0';
+  });
+
+  const counts = {};
+  STAGES.forEach(s => { counts[s.key] = 0; });
+
+  allLeads.forEach(lead => {
+    const col = q(`#col-${lead.stage}`);
+    if (!col) return;
+    counts[lead.stage] = (counts[lead.stage] || 0) + 1;
+    col.appendChild(createLeadCard(lead));
+  });
+
+  STAGES.forEach(s => {
+    const badge = q(`#badge-${s.key}`);
+    if (badge) badge.textContent = counts[s.key] || 0;
+    const col = q(`#col-${s.key}`);
+    if (col && counts[s.key] === 0) {
+      col.innerHTML = '<div class="empty-state">No leads</div>';
+    }
+  });
+
+  updateMobileView();
+}
+
+function createLeadCard(lead) {
+  const stageInfo = STAGES.find(s => s.key === lead.stage) || STAGES[0];
+  const svcMeta   = SERVICE_META[lead.service] || SERVICE_META.other;
+  const age       = timeAgo(lead.created_at);
+
+  const card = document.createElement('div');
+  card.className = 'lead-card';
+  card.dataset.id = lead.id;
+  card.style.borderLeftColor = stageInfo.color;
+  card.draggable = true;
+
+  card.innerHTML = `
+    <div class="lead-card-name">${escHtml(lead.name)}</div>
+    <div class="lead-card-phone">${escHtml(lead.phone || '—')}</div>
+    <div class="lead-card-meta">
+      ${lead.service ? `<span class="tag ${svcMeta.cls}">${svcMeta.label}</span>` : ''}
+      ${lead.gclid ? '<span class="tag" style="background:rgba(6,182,212,.15);color:#67E8F9;border:1px solid rgba(6,182,212,.3);font-size:.6rem;">ADS</span>' : ''}
+      <span class="lead-card-age">${age}</span>
+    </div>
+    ${lead.job_value ? `<div class="lead-card-value mt-1">$${fmtMoney(lead.job_value)}</div>` : ''}
+  `;
+
+  card.addEventListener('dragstart', e => handleDragStart(e, lead.id));
+  card.addEventListener('dragend',   handleDragEnd);
+  card.addEventListener('click',     () => openLeadDetail(lead.id));
+
+  return card;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// DRAG AND DROP
+// ──────────────────────────────────────────────────────────────────
+function handleDragStart(e, leadId) {
+  draggedLeadId = leadId;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', leadId);
+}
+
+function handleDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const col = e.currentTarget.closest('.kanban-col') || e.currentTarget.parentElement?.closest('.kanban-col');
+  if (col) col.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+  const col = e.currentTarget.closest('.kanban-col') || e.currentTarget.parentElement?.closest('.kanban-col');
+  if (col && !col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+}
+
+function handleDrop(e, targetStage) {
+  e.preventDefault();
+  document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+
+  const leadId = draggedLeadId;
+  draggedLeadId = null;
+  if (!leadId) return;
+
+  const lead = allLeads.find(l => l.id === leadId);
+  if (!lead || lead.stage === targetStage) return;
+
+  initiateStageChange(leadId, targetStage);
+}
+
+function initiateStageChange(leadId, targetStage) {
+  const lead = allLeads.find(l => l.id === leadId);
+  if (!lead) return;
+
+  if (targetStage === 'job_won') {
+    pendingLeadId = leadId;
+    pendingStage  = targetStage;
+    q('#job-value-input').value = lead.job_value || '';
+    q('#job-value-error').classList.add('hidden');
+    show('#modal-job-value');
+    setTimeout(() => q('#job-value-input').focus(), 50);
+    return;
+  }
+
+  if (targetStage === 'lost') {
+    pendingLeadId = leadId;
+    pendingStage  = targetStage;
+    q('#lost-reason-input').value = '';
+    show('#modal-lost-reason');
+    return;
+  }
+
+  updateLeadStage(leadId, targetStage);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// JOB WON MODAL
+// ──────────────────────────────────────────────────────────────────
+function confirmJobWon() {
+  const valStr = q('#job-value-input').value.trim();
+  const val    = parseFloat(valStr);
+  if (!valStr || isNaN(val) || val < 0) {
+    q('#job-value-error').classList.remove('hidden');
+    return;
+  }
+  closeModal('modal-job-value');
+  updateLeadStage(pendingLeadId, 'job_won', { job_value: val });
+  if (detailLeadId === pendingLeadId) refreshDetailPanel();
+  pendingLeadId = null;
+  pendingStage  = null;
+}
+
+function cancelJobWon() {
+  closeModal('modal-job-value');
+  pendingLeadId = null;
+  pendingStage  = null;
+}
+
+q('#job-value-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmJobWon(); });
+
+// ──────────────────────────────────────────────────────────────────
+// LOST MODAL
+// ──────────────────────────────────────────────────────────────────
+function confirmLost() {
+  const reason = q('#lost-reason-input').value;
+  closeModal('modal-lost-reason');
+  const lead = allLeads.find(l => l.id === pendingLeadId);
+  if (lead && reason) {
+    const notesAddition = `\n[Lost reason: ${reason}]`;
+    lead.notes = (lead.notes || '') + notesAddition;
+    if (!DEMO_MODE) {
+      supabase.from('leads').update({ notes: lead.notes }).eq('id', pendingLeadId).then(() => {});
+    }
+  }
+  updateLeadStage(pendingLeadId, 'lost');
+  pendingLeadId = null;
+  pendingStage  = null;
+}
+
+function cancelLost() {
+  closeModal('modal-lost-reason');
+  pendingLeadId = null;
+  pendingStage  = null;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// ADD LEAD MODAL
+// ──────────────────────────────────────────────────────────────────
+function openAddLeadModal() {
+  ['add-name','add-phone','add-email','add-address','add-description','add-gclid','add-utm-campaign','add-utm-term','add-utm-content'].forEach(id => {
+    const el = q(`#${id}`);
+    if (el) el.value = '';
+  });
+  q('#add-service').value = '';
+  show('#modal-add-lead');
+  setTimeout(() => q('#add-name').focus(), 50);
+}
+
+async function submitAddLead() {
+  const name  = q('#add-name').value.trim();
+  const phone = q('#add-phone').value.trim();
+  if (!name)  { showToast('Name is required.', 'error');  return; }
+  if (!phone) { showToast('Phone is required.', 'error'); return; }
+
+  setLoading('add-lead-submit-btn', true, 'Adding…');
+
+  const leadData = {
+    name,
+    phone,
+    email:        q('#add-email').value.trim()        || null,
+    address:      q('#add-address').value.trim()      || null,
+    service:      q('#add-service').value             || null,
+    description:  q('#add-description').value.trim()  || null,
+    gclid:        q('#add-gclid').value.trim()        || null,
+    utm_campaign: q('#add-utm-campaign').value.trim() || null,
+    utm_term:     q('#add-utm-term').value.trim()     || null,
+    utm_content:  q('#add-utm-content').value.trim()  || null,
+    utm_source:   'google',
+    utm_medium:   'cpc',
+  };
+
+  const result = await createLead(leadData);
+  setLoading('add-lead-submit-btn', false, 'Add Lead');
+  if (result) closeModal('modal-add-lead');
+}
+
+// ──────────────────────────────────────────────────────────────────
+// LEAD DETAIL MODAL
+// ──────────────────────────────────────────────────────────────────
+async function openLeadDetail(leadId) {
+  const lead = allLeads.find(l => l.id === leadId);
+  if (!lead) return;
+  detailLeadId = leadId;
+
+  const stageInfo = STAGES.find(s => s.key === lead.stage) || STAGES[0];
+  const svcMeta   = SERVICE_META[lead.service] || SERVICE_META.other;
+
+  q('#detail-name').textContent        = lead.name;
+  q('#detail-stage-badge').innerHTML   = `<span class="text-xs font-semibold" style="color:${stageInfo.color};text-shadow:0 0 8px ${stageInfo.color}88;">${stageInfo.label}</span>`;
+  q('#detail-phone').textContent       = lead.phone       || '—';
+  q('#detail-email').textContent       = lead.email       || '—';
+  q('#detail-address').textContent     = lead.address     || '—';
+  q('#detail-description').textContent = lead.description || '—';
+  q('#detail-value').textContent       = lead.job_value   ? '$' + fmtMoney(lead.job_value) : '—';
+  q('#detail-gclid').textContent       = lead.gclid       || '—';
+  q('#detail-utm-source').textContent  = lead.utm_source  || '—';
+  q('#detail-utm-campaign').textContent= lead.utm_campaign|| '—';
+  q('#detail-utm-term').textContent    = lead.utm_term    || '—';
+  q('#detail-utm-medium').textContent  = lead.utm_medium  || '—';
+  q('#detail-utm-content').textContent = lead.utm_content || '—';
+  q('#detail-notes').value             = lead.notes       || '';
+  q('#detail-stage-select').value      = lead.stage;
+  q('#notes-save-indicator').classList.add('hidden');
+
+  q('#detail-service').innerHTML = lead.service
+    ? `<span class="tag ${svcMeta.cls}">${svcMeta.label}</span>`
+    : '<span style="color:#374151;">—</span>';
+
+  const deleteBtn = q('#detail-delete-btn');
+  if (currentProfile?.role === 'admin') deleteBtn.classList.remove('hidden');
+  else deleteBtn.classList.add('hidden');
+
+  show('#modal-lead-detail');
+  await loadStageHistory(leadId);
+}
+
+async function refreshDetailPanel() {
+  if (!detailLeadId) return;
+  openLeadDetail(detailLeadId);
+}
+
+async function loadStageHistory(leadId) {
+  const container = q('#detail-history');
+  container.innerHTML = '<div class="text-xs" style="color:#374151;">Loading…</div>';
+
+  let history;
+  if (DEMO_MODE) {
+    history = DEMO_HISTORY.filter(h => h.lead_id === leadId)
+      .sort((a,b) => new Date(a.changed_at) - new Date(b.changed_at));
+  } else {
+    try {
+      const { data, error } = await supabase
+        .from('stage_history')
+        .select('*')
+        .eq('lead_id', leadId)
+        .order('changed_at', { ascending: true });
+      if (error) throw error;
+      history = data || [];
+    } catch(e) {
+      container.innerHTML = '<div class="text-xs" style="color:#F9A8D4;">Error loading history.</div>';
+      return;
+    }
+  }
+
+  if (!history.length) {
+    container.innerHTML = '<div class="text-xs" style="color:#374151;">No history yet.</div>';
+    return;
+  }
+
+  container.innerHTML = history.map((h, i) => {
+    const fromStage = STAGES.find(s => s.key === h.from_stage);
+    const toStage   = STAGES.find(s => s.key === h.to_stage);
+    const isLast    = i === history.length - 1;
+    return `
+      <div class="timeline-item">
+        <div style="position:relative;display:flex;flex-direction:column;align-items:center;width:10px;flex-shrink:0;">
+          <div class="timeline-dot" style="background:${toStage?.color || '#374151'};box-shadow:0 0 5px ${toStage?.color || '#374151'}88;"></div>
+          ${!isLast ? '<div style="flex:1;width:1px;background:rgba(99,102,241,.2);margin-top:2px;"></div>' : ''}
+        </div>
+        <div style="padding-bottom:${isLast?'0':'8px'}">
+          <div class="text-xs" style="color:#E2E8F0;">
+            ${fromStage ? `<span style="color:${fromStage.color}">${fromStage.label}</span> → ` : ''}
+            <span style="color:${toStage?.color || '#94A3B8'}">${toStage?.label || h.to_stage}</span>
+            ${h.job_value ? `<span class="text-green-400 font-semibold"> · $${fmtMoney(h.job_value)}</span>` : ''}
+          </div>
+          <div class="text-xs" style="color:#374151;">${fmtDate(h.changed_at)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function changeStageFromDetail(newStage) {
+  if (!detailLeadId) return;
+  const lead = allLeads.find(l => l.id === detailLeadId);
+  if (!lead || lead.stage === newStage) return;
+  closeModal('modal-lead-detail');
+  initiateStageChange(detailLeadId, newStage);
+}
+
+function scheduleNotesSave() {
+  if (notesSaveTimer) clearTimeout(notesSaveTimer);
+  q('#notes-save-indicator').classList.remove('hidden');
+  q('#notes-save-indicator').textContent = 'Saving…';
+  notesSaveTimer = setTimeout(async () => {
+    const notes = q('#detail-notes').value;
+    await updateLeadNotes(detailLeadId, notes);
+    q('#notes-save-indicator').textContent = 'Saved ✓';
+    setTimeout(() => q('#notes-save-indicator')?.classList.add('hidden'), 1200);
+  }, 800);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// STATS BAR
+// ──────────────────────────────────────────────────────────────────
+function updateStats() {
+  const total      = allLeads.length;
+  const contacted  = allLeads.filter(l => ['contacted','estimate_scheduled','estimate_completed','job_won','job_complete'].includes(l.stage)).length;
+  const estimates  = allLeads.filter(l => ['estimate_scheduled','estimate_completed'].includes(l.stage)).length;
+  const won        = allLeads.filter(l => l.stage === 'job_won' || l.stage === 'job_complete').length;
+  const revenue    = allLeads.filter(l => l.job_value).reduce((s, l) => s + Number(l.job_value), 0);
+  const closed     = allLeads.filter(l => l.stage === 'job_won' || l.stage === 'job_complete' || l.stage === 'lost').length;
+  const winRate    = closed > 0 ? Math.round((won / closed) * 100) : 0;
+
+  q('#stat-total').textContent    = total;
+  q('#stat-contacted').textContent= contacted;
+  q('#stat-estimates').textContent= estimates;
+  q('#stat-won').textContent      = won;
+  q('#stat-revenue').textContent  = revenue >= 1000 ? '$' + (revenue/1000).toFixed(1) + 'k' : '$' + Math.round(revenue);
+  q('#stat-winrate').textContent  = winRate + '%';
+}
+
+// ──────────────────────────────────────────────────────────────────
+// MOBILE STAGE FILTER
+// ──────────────────────────────────────────────────────────────────
+function buildMobileFilter() {
+  const container = q('#mobile-stage-filter');
+  if (!container) return;
+  container.innerHTML = STAGES.map(s => `
+    <button onclick="setMobileStage('${s.key}')" id="mob-tab-${s.key}"
+      class="flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full border transition-all"
+      style="border-color:${s.color};color:${s.color}">
+      ${s.label}
+    </button>
+  `).join('');
+  setMobileStage('new_lead');
+}
+
+function setMobileStage(stageKey) {
+  mobileActiveStage = stageKey;
+  updateMobileView();
+  STAGES.forEach(s => {
+    const btn = q(`#mob-tab-${s.key}`);
+    if (!btn) return;
+    const stageColor = STAGES.find(st => st.key === s.key)?.color || '#6366F1';
+    if (s.key === stageKey) {
+      btn.style.background = stageColor;
+      btn.style.color = '#fff';
+      btn.style.boxShadow = `0 0 10px ${stageColor}66`;
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = stageColor;
+      btn.style.boxShadow = 'none';
+    }
+  });
+}
+
+function updateMobileView() {
+  if (window.innerWidth >= 640) return;
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    if (col.dataset.stage === mobileActiveStage) {
+      col.classList.add('mobile-active');
+      col.classList.remove('mobile-hidden');
+    } else {
+      col.classList.add('mobile-hidden');
+      col.classList.remove('mobile-active');
+    }
+  });
+}
+
+window.addEventListener('resize', updateMobileView);
+
+// ──────────────────────────────────────────────────────────────────
+// EXPORT CONVERSIONS (Google Ads CSV)
+// ──────────────────────────────────────────────────────────────────
+async function exportConversions() {
+  let conversions = [];
+
+  if (DEMO_MODE) {
+    const wonHistory = DEMO_HISTORY.filter(h => h.to_stage === 'job_won');
+    wonHistory.forEach(h => {
+      const lead = makeDemoLeads().find(l => l.id === h.lead_id);
+      if (lead && lead.gclid) {
+        conversions.push({
+          gclid: lead.gclid,
+          conversion_name: 'JobWon',
+          conversion_time: fmtGoogleDate(h.changed_at),
+          conversion_value: h.job_value || 0,
+          currency: 'USD',
+        });
+      }
+    });
+  } else {
+    try {
+      const { data, error } = await supabase.rpc('get_conversion_ready_leads');
+      if (error) throw error;
+      conversions = data || [];
+    } catch(e) {
+      showToast('Error fetching conversions: ' + e.message, 'error');
+      return;
+    }
+  }
+
+  if (!conversions.length) {
+    showToast('No conversion-ready leads found (need gclid + Job Won stage).', 'info');
+    return;
+  }
+
+  const rows = [
+    'Parameters:TimeZone=America/New_York',
+    'Google Click ID,Conversion Name,Conversion Time,Conversion Value,Conversion Currency',
+    ...conversions.map(c =>
+      `${c.gclid},${c.conversion_name},${c.conversion_time},${c.conversion_value || ''},${c.currency}`
+    )
+  ];
+
+  const csv      = rows.join('\n');
+  const dateStr  = new Date().toISOString().slice(0,10);
+  const filename = `google-conversions-${dateStr}.csv`;
+  downloadText(csv, filename, 'text/csv');
+  showToast(`Exported ${conversions.length} conversions`, 'success');
+}
+
+// ──────────────────────────────────────────────────────────────────
+// ADMIN PANEL
+// ──────────────────────────────────────────────────────────────────
+async function openAdminPanel() {
+  show('#modal-admin');
+  loadAdminLeads();
+}
+
+async function switchAdminTab(tab, btn) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  ['all-leads','clients'].forEach(t => {
+    const el = q(`#admin-tab-${t}`);
+    if (el) el.classList.add('hidden');
+  });
+  q(`#admin-tab-${tab}`)?.classList.remove('hidden');
+
+  if (tab === 'all-leads') loadAdminLeads();
+  if (tab === 'clients')   loadAdminClients();
+}
+
+async function loadAdminLeads() {
+  const container = q('#admin-leads-list');
+  container.innerHTML = '<div class="flex items-center gap-2"><div class="spinner"></div><span class="text-sm" style="color:#4B5563;">Loading…</span></div>';
+
+  let leads, profiles;
+  if (DEMO_MODE) {
+    leads    = makeDemoLeads();
+    profiles = DEMO_PROFILES;
+  } else {
+    try {
+      const [lRes, pRes] = await Promise.all([
+        supabase.from('leads').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*'),
+      ]);
+      if (lRes.error) throw lRes.error;
+      if (pRes.error) throw pRes.error;
+      leads    = lRes.data || [];
+      profiles = pRes.data || [];
+    } catch(e) {
+      container.innerHTML = `<div class="text-sm" style="color:#F9A8D4;">Error: ${e.message}</div>`;
+      return;
+    }
+  }
+
+  const grouped = {};
+  profiles.filter(p => p.role !== 'admin').forEach(p => {
+    grouped[p.id] = { profile: p, leads: [] };
+  });
+  leads.forEach(l => {
+    if (grouped[l.client_id]) grouped[l.client_id].leads.push(l);
+  });
+
+  container.innerHTML = Object.values(grouped).map(({ profile, leads: clientLeads }) => {
+    const won = clientLeads.filter(l => l.stage === 'job_won' || l.stage === 'job_complete');
+    const rev = won.reduce((s,l) => s + (Number(l.job_value)||0), 0);
+    return `
+      <div class="rounded-lg p-3" style="background:#13132A;border:1px solid rgba(99,102,241,.15);">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <div class="font-semibold text-sm" style="color:#E2E8F0;">${escHtml(profile.full_name || 'Unknown')}</div>
+            <div class="text-xs" style="color:#4B5563;">${escHtml(profile.company || '—')}</div>
+          </div>
+          <div class="text-right">
+            <div class="text-sm font-bold text-green-400">$${fmtMoney(rev)}</div>
+            <div class="text-xs" style="color:#4B5563;">${clientLeads.length} leads · ${won.length} won</div>
+          </div>
+        </div>
+        <div class="flex gap-1 flex-wrap">
+          ${STAGES.map(s => {
+            const count = clientLeads.filter(l => l.stage === s.key).length;
+            if (!count) return '';
+            return `<span class="text-xs px-2 py-0.5 rounded" style="background:${s.color}22;color:${s.color}">${s.label}: ${count}</span>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('') || '<div class="text-sm" style="color:#4B5563;">No clients found.</div>';
+}
+
+async function loadAdminClients() {
+  const container = q('#admin-clients-list');
+  container.innerHTML = '<div class="flex items-center gap-2"><div class="spinner"></div><span class="text-sm" style="color:#4B5563;">Loading…</span></div>';
+
+  let profiles;
+  if (DEMO_MODE) {
+    profiles = DEMO_PROFILES;
+  } else {
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      profiles = data || [];
+    } catch(e) {
+      container.innerHTML = `<div class="text-sm" style="color:#F9A8D4;">Error: ${e.message}</div>`;
+      return;
+    }
+  }
+
+  container.innerHTML = profiles.map(p => `
+    <div class="flex items-center gap-3 rounded-lg px-3 py-2" style="background:#13132A;border:1px solid rgba(99,102,241,.12);">
+      <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+           style="background:${p.role==='admin'?'rgba(99,102,241,.2)':'rgba(6,182,212,.15)'};color:${p.role==='admin'?'#818CF8':'#67E8F9'};border:1px solid ${p.role==='admin'?'rgba(99,102,241,.3)':'rgba(6,182,212,.25)'};">
+        ${(p.full_name||'?')[0].toUpperCase()}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-semibold truncate" style="color:#E2E8F0;">${escHtml(p.full_name || '—')}</div>
+        <div class="text-xs truncate" style="color:#4B5563;">${escHtml(p.company || '—')}</div>
+      </div>
+      <span class="text-xs px-2 py-0.5 rounded" style="background:${p.role==='admin'?'rgba(99,102,241,.2)':'rgba(6,182,212,.1)'};color:${p.role==='admin'?'#818CF8':'#67E8F9'};border:1px solid ${p.role==='admin'?'rgba(99,102,241,.3)':'rgba(6,182,212,.2)'};">${p.role}</span>
+    </div>
+  `).join('') || '<div class="text-sm" style="color:#4B5563;">No profiles found.</div>';
+}
+
+function openCreateClientModal() {
+  ['create-client-name','create-client-company','create-client-email','create-client-password'].forEach(id => {
+    const el = q(`#${id}`);
+    if (el) el.value = '';
+  });
+  show('#modal-create-client');
+}
+
+async function submitCreateClient() {
+  const name     = q('#create-client-name').value.trim();
+  const company  = q('#create-client-company').value.trim();
+  const email    = q('#create-client-email').value.trim();
+  const password = q('#create-client-password').value;
+
+  if (!email)    { showToast('Email is required.',    'error'); return; }
+  if (!password || password.length < 6) { showToast('Password must be at least 6 characters.', 'error'); return; }
+
+  if (DEMO_MODE) {
+    showToast('Cannot create users in demo mode.', 'info');
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      user_metadata: { full_name: name, company, role: 'client' },
+      email_confirm: true,
+    });
+    if (error) throw error;
+    showToast(`Client account created for ${email}`, 'success');
+    closeModal('modal-create-client');
+    loadAdminClients();
+  } catch(e) {
+    try {
+      const { data, error: signUpErr } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name, company, role: 'client' } },
+      });
+      if (signUpErr) throw signUpErr;
+      showToast(`Invitation sent to ${email}. They'll need to confirm their email.`, 'success');
+      closeModal('modal-create-client');
+      loadAdminClients();
+    } catch(e2) {
+      showToast('Error creating client: ' + (e2.message || e.message), 'error');
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// UTILITIES
+// ──────────────────────────────────────────────────────────────────
+function q(selector) {
+  if (selector.startsWith('#')) return document.getElementById(selector.slice(1));
+  // Try getElementById first (handles bare IDs like 'loading-screen')
+  const byId = document.getElementById(selector);
+  if (byId) return byId;
+  return document.querySelector(selector);
+}
+
+function show(id) {
+  const el = typeof id === 'string' ? q(id) : id;
+  el?.classList.remove('hidden');
+}
+
+function hide(id) {
+  const el = typeof id === 'string' ? q(id) : id;
+  el?.classList.add('hidden');
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtMoney(n) {
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' });
+}
+
+function fmtGoogleDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const seconds = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (seconds < 60)    return 'just now';
+  if (seconds < 3600)  return Math.floor(seconds/60) + 'm ago';
+  if (seconds < 86400) return Math.floor(seconds/3600) + 'h ago';
+  const days = Math.floor(seconds/86400);
+  if (days === 1) return '1 day ago';
+  if (days < 30)  return days + ' days ago';
+  return Math.floor(days/30) + ' mo ago';
+}
+
+function downloadText(text, filename, mimeType) {
+  const blob = new Blob([text], { type: mimeType });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function setLoading(btnId, loading, text) {
+  const btn = q(`#${btnId}`);
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    btn.dataset.origText = btn.textContent;
+    btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> ${text}`;
+  } else {
+    btn.disabled = false;
+    btn.textContent = text || btn.dataset.origText || 'Submit';
+  }
+}
+
+// ── Toast notifications ───────────────────────────────────────────
+function showToast(message, type = 'info') {
+  const container = q('#toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity .3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+// ── Modal helpers ─────────────────────────────────────────────────
+function closeModal(id) {
+  hide(`#${id}`);
+  if (id === 'modal-lead-detail') {
+    detailLeadId = null;
+    if (notesSaveTimer) clearTimeout(notesSaveTimer);
+  }
+}
+
+document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+  backdrop.addEventListener('click', e => {
+    if (e.target === backdrop) {
+      const modal = backdrop.id;
+      if (modal === 'modal-job-value') { cancelJobWon(); return; }
+      if (modal === 'modal-lost-reason') { cancelLost(); return; }
+      closeModal(modal);
+    }
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    ['modal-lead-detail','modal-add-lead','modal-admin','modal-create-client'].forEach(id => {
+      if (!q(`#${id}`)?.classList.contains('hidden')) closeModal(id);
+    });
+    if (!q('#modal-job-value')?.classList.contains('hidden')) cancelJobWon();
+    if (!q('#modal-lost-reason')?.classList.contains('hidden')) cancelLost();
+  }
+});
+
+</script>
+</body>
+</html>
