@@ -167,6 +167,41 @@
     background: linear-gradient(90deg, #6366F1, #06B6D4);
     border-radius: 1px;
   }
+
+  /* ── Stale Lead Alerts ── */
+  .stale-card { box-shadow: 0 0 10px rgba(245,158,11,.18), inset 0 0 8px rgba(245,158,11,.04) !important; }
+  .stale-card:hover { box-shadow: 0 0 18px rgba(245,158,11,.35), inset 0 0 12px rgba(245,158,11,.06) !important; }
+  .stale-badge { display: inline-flex; align-items: center; font-size: .65rem; font-weight: 700; padding: 1px 6px; border-radius: 9999px; background: rgba(245,158,11,.15); color: #FCD34D; border: 1px solid rgba(245,158,11,.35); white-space: nowrap; flex-shrink: 0; }
+
+  /* ── Funnel Chart ── */
+  .funnel-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .funnel-bar-wrap { flex: 1; background: rgba(99,102,241,.08); border-radius: 4px; height: 28px; position: relative; overflow: hidden; }
+  .funnel-bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: .72rem; font-weight: 700; color: #fff; transition: width .4s ease; white-space: nowrap; overflow: hidden; }
+  .funnel-label { font-size: .72rem; color: #818CF8; width: 130px; text-align: right; flex-shrink: 0; }
+  .funnel-count { font-size: .72rem; font-weight: 700; color: #E2E8F0; width: 32px; text-align: right; flex-shrink: 0; }
+  .funnel-drop  { font-size: .65rem; color: #F87171; width: 44px; text-align: right; flex-shrink: 0; }
+
+  /* ── CPL/ROAS Calculator ── */
+  .calc-box { background: #0D0D1A; border: 1px solid rgba(99,102,241,.2); border-radius: 10px; padding: 16px 18px; }
+  .calc-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .calc-row label { font-size: .72rem; color: #818CF8; font-weight: 600; width: 160px; flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em; }
+  .calc-input { background: #05050F; border: 1px solid rgba(99,102,241,.3); color: #E2E8F0; border-radius: 6px; padding: 6px 10px; font-size: .875rem; width: 130px; outline: none; }
+  .calc-input:focus { border-color: #6366F1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+  .calc-result { background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.15); border-radius: 8px; padding: 12px 14px; margin-top: 6px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .calc-metric { display: flex; flex-direction: column; gap: 2px; }
+  .calc-metric-val { font-size: 1.1rem; font-weight: 700; color: #F1F5F9; }
+  .calc-metric-lbl { font-size: .65rem; color: #4B5563; text-transform: uppercase; letter-spacing: .05em; }
+  .calc-metric-val.good { color: #34D399; }
+  .calc-metric-val.warn { color: #FCD34D; }
+  .calc-metric-val.bad  { color: #F87171; }
+
+  /* ── Velocity table ── */
+  .velocity-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(99,102,241,.07); }
+  .velocity-stage { font-size: .75rem; color: #CBD5E1; flex: 1; }
+  .velocity-bar-wrap { width: 100px; background: rgba(99,102,241,.1); border-radius: 3px; height: 6px; flex-shrink: 0; }
+  .velocity-bar-fill { height: 6px; border-radius: 3px; transition: width .4s ease; }
+  .velocity-days { font-size: .72rem; font-weight: 700; color: #818CF8; width: 50px; text-align: right; flex-shrink: 0; }
+  .velocity-count { font-size: .65rem; color: #4B5563; width: 50px; text-align: right; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -1304,14 +1339,23 @@ function createLeadCard(lead) {
   const svcMeta   = SERVICE_META[lead.service] || SERVICE_META.other;
   const age       = timeAgo(lead.created_at);
 
+  // ── Stale lead detection ──────────────────────────────────────────
+  const ACTIVE_STAGES   = new Set(['new_lead','contacted','estimate_scheduled','estimate_completed','job_won']);
+  const daysSinceUpdate = (Date.now() - new Date(lead.updated_at).getTime()) / 86400000;
+  const isStale         = ACTIVE_STAGES.has(lead.stage) && daysSinceUpdate >= 3;
+  const staleDays       = Math.floor(daysSinceUpdate);
+
   const card = document.createElement('div');
-  card.className = 'lead-card';
+  card.className = 'lead-card' + (isStale ? ' stale-card' : '');
   card.dataset.id = lead.id;
-  card.style.borderLeftColor = stageInfo.color;
+  card.style.borderLeftColor = isStale ? '#F59E0B' : stageInfo.color;
   card.draggable = true;
 
   card.innerHTML = `
-    <div class="lead-card-name">${escHtml(lead.name)}</div>
+    <div class="flex items-start justify-between gap-1">
+      <div class="lead-card-name">${escHtml(lead.name)}</div>
+      ${isStale ? `<span class="stale-badge" title="No activity for ${staleDays} days">⚠ ${staleDays}d</span>` : ''}
+    </div>
     <div class="lead-card-phone">${escHtml(lead.phone || '—')}</div>
     <div class="lead-card-meta">
       ${lead.service ? `<span class="tag ${svcMeta.cls}">${svcMeta.label}</span>` : ''}
@@ -1733,7 +1777,101 @@ function buildAttributionReport() {
   const totalWon  = leads.filter(l => ['job_won','job_complete'].includes(l.stage));
   const totalRev  = totalWon.reduce((s,l) => s + Number(l.job_value||0), 0);
 
+  // ── Section 4: Visual Funnel Chart ──
+  const stageOrder = ['new_lead','contacted','estimate_scheduled','estimate_completed','job_won','job_complete'];
+  const stageLabels = { new_lead:'New Lead', contacted:'Contacted', estimate_scheduled:'Est. Scheduled', estimate_completed:'Est. Completed', job_won:'Job Won', job_complete:'Job Complete' };
+  const stageColors = { new_lead:'#6366F1', contacted:'#06B6D4', estimate_scheduled:'#8B5CF6', estimate_completed:'#F59E0B', job_won:'#10B981', job_complete:'#34D399' };
+  const stageCounts = stageOrder.map(s => leads.filter(l => l.stage === s).length);
+  const funnelMax   = Math.max(...stageCounts, 1);
+  const funnelRows  = stageOrder.map((s, i) => {
+    const cnt  = stageCounts[i];
+    const prev = i > 0 ? stageCounts[i - 1] : cnt;
+    const pct  = Math.round((cnt / funnelMax) * 100);
+    const drop = prev > 0 && i > 0 ? Math.round(((prev - cnt) / prev) * 100) : null;
+    const dropHtml = drop !== null ? `<span class="funnel-drop">▼ ${drop}%</span>` : `<span class="funnel-drop"></span>`;
+    return `
+      <div class="funnel-row">
+        <span class="funnel-label">${stageLabels[s]}</span>
+        <div class="funnel-bar-wrap">
+          <div class="funnel-bar-fill" style="width:${pct}%;background:${stageColors[s]};">${cnt > 0 ? cnt : ''}</div>
+        </div>
+        <span class="funnel-count">${cnt}</span>
+        ${dropHtml}
+      </div>`;
+  }).join('');
+
+  // ── Section 5: Pipeline Velocity ──
+  // Use updated_at as proxy for "time spent" in current stage
+  const now = Date.now();
+  const velocityData = stageOrder.map(s => {
+    const stageLeads = leads.filter(l => l.stage === s);
+    if (!stageLeads.length) return { stage: s, avg: 0, count: 0 };
+    const avgDays = stageLeads.reduce((sum, l) => {
+      const d = (now - new Date(l.updated_at).getTime()) / 86400000;
+      return sum + d;
+    }, 0) / stageLeads.length;
+    return { stage: s, avg: Math.round(avgDays * 10) / 10, count: stageLeads.length };
+  }).filter(d => d.count > 0);
+  const velMax = Math.max(...velocityData.map(d => d.avg), 1);
+  const velRows = velocityData.map(d => {
+    const barPct = Math.round((d.avg / velMax) * 100);
+    const color  = d.avg > 14 ? '#F87171' : d.avg > 7 ? '#FCD34D' : '#34D399';
+    return `
+      <div class="velocity-row">
+        <span class="velocity-stage">${stageLabels[d.stage]}</span>
+        <div class="velocity-bar-wrap"><div class="velocity-bar-fill" style="width:${barPct}%;background:${color};"></div></div>
+        <span class="velocity-days" style="color:${color};">${d.avg}d avg</span>
+        <span class="velocity-count">${d.count} leads</span>
+      </div>`;
+  }).join('');
+
   el.innerHTML = `
+    <!-- ── FUNNEL CHART ── -->
+    <p class="attr-section-title">📊 Visual Pipeline Funnel</p>
+    <div style="margin-bottom:18px;">
+      <div style="display:flex;justify-content:flex-end;gap:16px;margin-bottom:8px;">
+        <span style="font-size:.65rem;color:#4B5563;">STAGE</span>
+        <span style="font-size:.65rem;color:#4B5563;width:32px;text-align:right;">COUNT</span>
+        <span style="font-size:.65rem;color:#F87171;width:44px;text-align:right;">DROP-OFF</span>
+      </div>
+      ${funnelRows}
+    </div>
+
+    <!-- ── PIPELINE VELOCITY ── -->
+    <p class="attr-section-title">⚡ Pipeline Velocity <span style="font-size:.65rem;color:#4B5563;font-weight:400;text-transform:none;letter-spacing:0;"> — avg days leads sit at each stage</span></p>
+    <div style="margin-bottom:18px;">
+      ${velRows || '<div class="text-sm" style="color:#4B5563;padding:8px 0;">No velocity data yet.</div>'}
+      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+        <span style="font-size:.65rem;color:#34D399;">● &lt; 7 days (healthy)</span>
+        <span style="font-size:.65rem;color:#FCD34D;">● 7–14 days (slow)</span>
+        <span style="font-size:.65rem;color:#F87171;">● &gt; 14 days (stale)</span>
+      </div>
+    </div>
+
+    <!-- ── CPL / ROAS CALCULATOR ── -->
+    <p class="attr-section-title">💰 CPL / ROAS Calculator</p>
+    <div class="calc-box" style="margin-bottom:18px;">
+      <div class="calc-row">
+        <label>Monthly Ad Spend</label>
+        <input id="calc-spend" class="calc-input" type="number" min="0" placeholder="e.g. 5000" oninput="calcROAS()" />
+      </div>
+      <div class="calc-row">
+        <label>Total Leads (auto)</label>
+        <input id="calc-leads" class="calc-input" type="number" min="1" value="${leads.length}" oninput="calcROAS()" />
+      </div>
+      <div class="calc-row">
+        <label>Estimated Revenue (auto)</label>
+        <input id="calc-rev" class="calc-input" type="number" min="0" value="${Math.round(totalRev)}" oninput="calcROAS()" />
+      </div>
+      <div class="calc-result" id="calc-output">
+        <div class="calc-metric"><span class="calc-metric-val" id="calc-cpl">—</span><span class="calc-metric-lbl">Cost / Lead</span></div>
+        <div class="calc-metric"><span class="calc-metric-val" id="calc-roas">—</span><span class="calc-metric-lbl">ROAS</span></div>
+        <div class="calc-metric"><span class="calc-metric-val" id="calc-cpa">—</span><span class="calc-metric-lbl">Cost / Job Won</span></div>
+        <div class="calc-metric"><span class="calc-metric-val" id="calc-roi">—</span><span class="calc-metric-lbl">ROI</span></div>
+      </div>
+      <div style="font-size:.65rem;color:#374151;margin-top:8px;">Enter your monthly Google Ads spend above — CPL, ROAS, and ROI calculate instantly.</div>
+    </div>
+
     <p class="attr-section-title">By Campaign</p>
     <table class="attr-table">
       <thead><tr><th>Campaign</th><th class="num">Leads</th><th class="num">Won</th><th class="num">Revenue</th><th class="num">Win Rate</th></tr></thead>
@@ -1758,6 +1896,41 @@ function buildAttributionReport() {
       </tbody>
     </table>
   `;
+}
+
+// CPL / ROAS live calculator
+function calcROAS() {
+  const spend = parseFloat(document.getElementById('calc-spend')?.value) || 0;
+  const leads  = parseInt(document.getElementById('calc-leads')?.value)  || 0;
+  const rev    = parseFloat(document.getElementById('calc-rev')?.value)   || 0;
+  const wonLeads = allLeads ? allLeads.filter(l => ['job_won','job_complete'].includes(l.stage)).length : 0;
+
+  const cplEl  = document.getElementById('calc-cpl');
+  const roasEl = document.getElementById('calc-roas');
+  const cpaEl  = document.getElementById('calc-cpa');
+  const roiEl  = document.getElementById('calc-roi');
+  if (!cplEl) return;
+
+  if (spend <= 0) {
+    [cplEl, roasEl, cpaEl, roiEl].forEach(el => { if (el) el.textContent = '—'; el && el.classList.remove('good','warn','bad'); });
+    return;
+  }
+
+  const cpl  = leads > 0 ? spend / leads : 0;
+  const roas = rev   > 0 ? rev / spend   : 0;
+  const cpa  = wonLeads > 0 ? spend / wonLeads : 0;
+  const roi  = spend > 0 ? ((rev - spend) / spend) * 100 : 0;
+
+  const fmt = n => n >= 1000 ? '$' + (n/1000).toFixed(1) + 'k' : '$' + Math.round(n);
+
+  cplEl.textContent  = cpl  > 0 ? fmt(cpl)             : '—';
+  roasEl.textContent = roas > 0 ? roas.toFixed(2) + 'x' : '—';
+  cpaEl.textContent  = cpa  > 0 ? fmt(cpa)             : '—';
+  roiEl.textContent  = rev  > 0 ? Math.round(roi) + '%' : '—';
+
+  // Color-code ROAS
+  roasEl.className = 'calc-metric-val ' + (roas >= 3 ? 'good' : roas >= 1.5 ? 'warn' : 'bad');
+  roiEl.className  = 'calc-metric-val ' + (roi  >= 200 ? 'good' : roi >= 50 ? 'warn' : 'bad');
 }
 
 // ──────────────────────────────────────────────────────────────────
